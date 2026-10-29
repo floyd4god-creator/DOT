@@ -90,6 +90,20 @@
   }
   .icon-btn:hover { color: var(--text); border-color: var(--muted); }
   .brief-btn { width: auto; border-radius: 22px; padding: 0 14px 0 12px; gap: 6px; display: flex; align-items: center; color: var(--amber); border-color: color-mix(in srgb, var(--amber) 45%, var(--line)); font-weight: 500; }
+  .count { font-weight: 600; font-size: .8rem; min-width: 0; }
+  .count:not(:empty) { background: var(--amber); color: var(--bg); border-radius: 10px; padding: 1px 7px; }
+  .tlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  .tlist li { display: flex; align-items: center; gap: 10px; padding: 8px 4px; border-bottom: 1px solid var(--line); }
+  .tlist li .txt { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .tlist li.done .txt { text-decoration: line-through; color: var(--muted); }
+  .tlist input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--amber); flex: none; }
+  .due { font-size: .78rem; color: var(--muted); border: 1px solid var(--line); border-radius: 10px; padding: 1px 8px; white-space: nowrap; }
+  .due.over { color: var(--alert); border-color: var(--alert); }
+  .due.today { color: var(--amber); border-color: var(--amber); }
+  .del { background: transparent; border: 0; color: var(--muted); font-size: 1.3rem; line-height: 1; cursor: pointer; padding: 4px 6px; }
+  .addrow { display: flex; gap: 8px; }
+  .addrow input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .empty-note { color: var(--muted); font-size: .9rem; margin: 4px 0; }
   @media (max-width: 420px) { .brief-btn span { display: none; } .brief-btn { padding: 0; width: 44px; justify-content: center; } }
 
   main { display: grid; grid-template-rows: auto 1fr; gap: 8px; min-height: 0; }
@@ -177,6 +191,10 @@
   <header>
     <span class="brand">DOT</span>
     <span style="display:flex;gap:10px">
+    <button class="icon-btn brief-btn" id="listBtn" aria-label="List and notes">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg>
+      <span>List</span><b class="count" id="listCount"></b>
+    </button>
     <button class="icon-btn brief-btn" id="briefBtn" aria-label="Briefing">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
       <span>Briefing</span>
@@ -251,6 +269,18 @@
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1"/><path d="M12 18v4"/></svg>
     </button>
   </footer>
+
+  <dialog id="listDlg">
+    <div class="sheet">
+      <h2>To-do list</h2>
+      <div class="addrow"><input id="todoIn" type="text" placeholder="Add a task" enterkeyhint="done"><button class="btn primary" id="todoAdd">Add</button></div>
+      <ul class="tlist" id="todoList"></ul>
+      <h2 style="margin-top:8px">Notes</h2>
+      <div class="addrow"><input id="noteIn" type="text" placeholder="Add a note" enterkeyhint="done"><button class="btn primary" id="noteAdd">Add</button></div>
+      <ul class="tlist" id="noteList"></ul>
+      <div class="actions"><button class="btn" id="clearDone">Clear completed</button><button class="btn primary" id="listClose" autofocus>Close</button></div>
+    </div>
+  </dialog>
 
   <dialog id="settings">
     <div class="sheet">
@@ -342,12 +372,86 @@
   function load() {
     try {
       const s = JSON.parse(localStorage.getItem(KEY));
-      if (s) return { settings: { ...DEFAULTS, ...s.settings }, history: Array.isArray(s.history) ? s.history : [] };
+      if (s) return { settings: { ...DEFAULTS, ...s.settings }, history: Array.isArray(s.history) ? s.history : [],
+        todos: Array.isArray(s.todos) ? s.todos : [], qnotes: Array.isArray(s.qnotes) ? s.qnotes : [], nextId: s.nextId || 1 };
     } catch (e) {}
-    return { settings: { ...DEFAULTS }, history: [] };
+    return { settings: { ...DEFAULTS }, history: [], todos: [], qnotes: [], nextId: 1 };
   }
   let state = load();
   function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+
+  // ---------- to-do list & notes ----------
+  const fmtDue = (d) => { const [y, m, dd] = d.split("-").map(Number); return new Date(y, m - 1, dd).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }); };
+  function pruneTodos() {
+    const week = Date.now() - 7 * 86400000;
+    state.todos = state.todos.filter((t) => !t.done || (t.doneAt || 0) > week);
+  }
+  function listForPrompt() {
+    const open = state.todos.filter((t) => !t.done), done = state.todos.filter((t) => t.done).slice(-5);
+    const line = (t) => "#" + t.id + " " + t.text + (t.due ? " (due " + fmtDue(t.due) + ", " + t.due + ")" : "");
+    return "Open items: " + (open.length ? open.map(line).join("; ") : "none") +
+      "\nRecently completed: " + (done.length ? done.map(line).join("; ") : "none") +
+      "\nNotes: " + (state.qnotes.length ? state.qnotes.slice(-25).map((n) => "#" + n.id + " " + n.text).join("; ") : "none");
+  }
+  function applyListCommand(cmd, arg) {
+    const byId = (list) => { const id = Number(String(arg).replace(/[^\d]/g, "")); return list.find((x) => x.id === id); };
+    if (cmd === "TODO_ADD") {
+      const [text, dueRaw] = arg.split("|").map((x) => x.trim());
+      if (!text) return null;
+      const due = /^\d{4}-\d{2}-\d{2}$/.test(dueRaw || "") ? dueRaw : null;
+      state.todos.push({ id: state.nextId++, text, due, done: false, created: Date.now() });
+      return "Added to list: " + text + (due ? " (due " + fmtDue(due) + ")" : "");
+    }
+    if (cmd === "TODO_DONE" || cmd === "TODO_UNDONE") {
+      const t = byId(state.todos); if (!t) return null;
+      t.done = cmd === "TODO_DONE"; t.doneAt = t.done ? Date.now() : null;
+      return (t.done ? "Checked off: " : "Reopened: ") + t.text;
+    }
+    if (cmd === "TODO_DELETE") {
+      const t = byId(state.todos); if (!t) return null;
+      state.todos = state.todos.filter((x) => x !== t);
+      return "Removed from list: " + t.text;
+    }
+    if (cmd === "NOTE") {
+      state.qnotes.push({ id: state.nextId++, text: arg, created: Date.now() });
+      return "Note saved: " + arg;
+    }
+    if (cmd === "NOTE_DELETE") {
+      const n = byId(state.qnotes); if (!n) return null;
+      state.qnotes = state.qnotes.filter((x) => x !== n);
+      return "Note deleted";
+    }
+    return null;
+  }
+  function renderList() {
+    pruneTodos();
+    const today = todayStr();
+    const open = state.todos.filter((t) => !t.done).sort((a, b) => (a.due || "9999") .localeCompare(b.due || "9999"));
+    const done = state.todos.filter((t) => t.done);
+    const ul = $("todoList"); ul.innerHTML = "";
+    if (!open.length && !done.length) { const li = document.createElement("li"); li.innerHTML = '<span class="empty-note">Nothing on your list. Add a task here or tell DOT.</span>'; ul.append(li); }
+    [...open, ...done].forEach((t) => {
+      const li = document.createElement("li"); if (t.done) li.className = "done";
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = t.done; cb.setAttribute("aria-label", "Done");
+      cb.onchange = () => { t.done = cb.checked; t.doneAt = t.done ? Date.now() : null; save(); renderList(); };
+      const tx = document.createElement("span"); tx.className = "txt"; tx.textContent = t.text;
+      li.append(cb, tx);
+      if (t.due) { const d = document.createElement("span"); d.className = "due" + (!t.done && t.due < today ? " over" : t.due === today ? " today" : ""); d.textContent = t.due === today ? "Today" : fmtDue(t.due); li.append(d); }
+      const del = document.createElement("button"); del.className = "del"; del.textContent = "×"; del.setAttribute("aria-label", "Delete");
+      del.onclick = () => { state.todos = state.todos.filter((x) => x !== t); save(); renderList(); };
+      li.append(del); ul.append(li);
+    });
+    const nl = $("noteList"); nl.innerHTML = "";
+    if (!state.qnotes.length) { const li = document.createElement("li"); li.innerHTML = '<span class="empty-note">No notes yet. Say “DOT, take a note…”</span>'; nl.append(li); }
+    state.qnotes.slice().reverse().forEach((n) => {
+      const li = document.createElement("li");
+      const tx = document.createElement("span"); tx.className = "txt"; tx.textContent = n.text;
+      const del = document.createElement("button"); del.className = "del"; del.textContent = "×"; del.setAttribute("aria-label", "Delete note");
+      del.onclick = () => { state.qnotes = state.qnotes.filter((x) => x !== n); save(); renderList(); };
+      li.append(tx, del); nl.append(li);
+    });
+    const c = open.length; $("listCount").textContent = c ? String(c) : "";
+  }
 
   // ---------- color theme ----------
   function applyPalette(name) {
@@ -393,7 +497,7 @@
     document.querySelectorAll(".report-btn").forEach((x) => x.remove());
     unlockSpeech(); lastInputVoice = false;
     const h = new Date().getHours(), part = h < 12 ? "Morning" : h < 17 ? "Afternoon" : "Evening";
-    ask(part + " briefing, please: the Helendale weather, my calendar for today, a short silver update, and the top three news headlines.");
+    ask(part + " briefing, please: the Helendale weather, my calendar for today, a short silver update, my to-do list, and the top three news headlines.");
   }
   function render() {
     logEl.innerHTML = "";
@@ -453,8 +557,20 @@ Use MEMO only for things worth keeping long term. Never read the MEMO line aloud
       `BRIEFING
 When ${name} asks for a briefing, gather everything with your tools first: Helendale weather, his calendar for today if you have a calendar tool, silver prices with his stack, and the top three national news headlines from one web search.
 Then deliver one spoken rundown of about 170 words in this order:
-a short greeting suited to the time of day; the weather now, the high and low, and anything notable; today's schedule, or say his calendar is clear; silver in two sentences covering price and direction, buying window status, and stack progress; three headlines in one sentence each; then close with one short question or suggestion.
+a short greeting suited to the time of day; the weather now, the high and low, and anything notable; today's schedule, or say his calendar is clear; silver in two sentences covering price and direction, buying window status, and stack progress; his to-do list in one sentence, naming overdue and due-today items and how many others are open; three headlines in one sentence each; then close with one short question or suggestion.
 Do not give the full silver report unless he asks for it, and do not state the clock time. If any source is unavailable, say so in a few words and continue with the rest.`,
+
+      `TO-DO LIST AND NOTES
+${listForPrompt()}
+To change the list or notes, add one line per change at the very end of your reply, each on its own line, in exactly these forms:
+TODO_ADD: task text | YYYY-MM-DD
+TODO_DONE: id
+TODO_UNDONE: id
+TODO_DELETE: id
+NOTE: note text
+NOTE_DELETE: id
+Include the date part of TODO_ADD only when he gives a due date, converting words like tomorrow or Friday into the actual date. Use the id numbers shown above. Confirm each change in a few words in your reply. Never read these lines aloud or mention them; the system removes them and updates the list.
+When he asks what is on his list, read the open items briefly, overdue and due-today items first. You cannot send alerts when the app is closed; if he wants a timed reminder, add the task with its date and suggest he also set an alert in the iPad Reminders app.`,
 
       `SILVER STACK
 ${name} currently holds ${s.stackOz} ounces of silver toward a goal of ${s.stackGoal} ounces. His buying window is days ${s.buyWindow || "not set"} of each month.
@@ -524,6 +640,12 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
       reply = reply.replace(/^\s*STACK:\s*([\d.]+).*$/gim, (m, n) => { stackNew = Number(n); return ""; }).trim() || "Noted.";
       if (stackNew !== null && !isNaN(stackNew)) state.settings.stackOz = stackNew;
       recordSilver(data.metals);
+      const listChanges = [];
+      reply = reply.replace(/^\s*(TODO_ADD|TODO_DONE|TODO_UNDONE|TODO_DELETE|NOTE_DELETE|NOTE):\s*(.+)$/gim, (m, cmd, arg) => {
+        const msg = applyListCommand(cmd.toUpperCase(), arg.trim());
+        if (msg) listChanges.push(msg);
+        return "";
+      }).trim() || "Done.";
       if (memos.length) {
         state.settings.notes = (state.settings.notes ? state.settings.notes + "\n" : "") + memos.map((f) => "- " + f).join("\n");
       }
@@ -533,6 +655,8 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
       logEl.append(msgEl("assistant", reply));
       if (stackNew !== null && !isNaN(stackNew)) { const p = document.createElement("p"); p.className = "msg memo"; p.textContent = "Silver stack updated: " + stackNew + " oz"; logEl.append(p); }
       memos.forEach((f) => { const p = document.createElement("p"); p.className = "msg memo"; p.textContent = "Saved to memory: " + f; logEl.append(p); });
+      listChanges.forEach((t) => { const p = document.createElement("p"); p.className = "msg memo"; p.textContent = t; logEl.append(p); });
+      if (listChanges.length) renderList();
       scrollDown();
       speak(reply);
     } catch (e) {
@@ -816,6 +940,16 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
   }
   $("openSettings").onclick = openSettings;
   $("briefBtn").onclick = runBriefing;
+  const listDlg = $("listDlg");
+  $("listBtn").onclick = () => { renderList(); listDlg.showModal(); };
+  $("listClose").onclick = () => listDlg.close();
+  listDlg.addEventListener("click", (e) => { if (e.target === listDlg) listDlg.close(); });
+  const addTodo = () => { const v = $("todoIn").value.trim(); if (!v) return; applyListCommand("TODO_ADD", v); $("todoIn").value = ""; save(); renderList(); };
+  const addNote = () => { const v = $("noteIn").value.trim(); if (!v) return; applyListCommand("NOTE", v); $("noteIn").value = ""; save(); renderList(); };
+  $("todoAdd").onclick = addTodo; $("noteAdd").onclick = addNote;
+  $("todoIn").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addTodo(); } });
+  $("noteIn").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addNote(); } });
+  $("clearDone").onclick = () => { state.todos = state.todos.filter((t) => !t.done); save(); renderList(); };
   $("saveBtn").onclick = () => { state.settings = { ...state.settings, ...readForm() }; save(); dlg.close(); render(); };
   $("testVoice").onclick = () => { unlockSpeech(); const f = readForm(); speak(`DOT online. Standing by, ${f.callsign}.`, { ...f, autoSpeak: true }); };
   $("clearBtn").onclick = () => {
@@ -832,6 +966,7 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
   $("textIn").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); send(); } });
 
   applyPalette(state.settings.palette);
+  renderList();
   render();
   setMode("idle");
   if (!state.settings.workerUrl) openSettings();
