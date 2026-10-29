@@ -209,9 +209,18 @@
         <input id="sName" type="text">
       </div>
       <div class="field">
-        <label for="sVoice">Voice</label>
+        <label for="sEngine">Voice engine</label>
+        <select id="sEngine">
+          <option value="cloud">Cloud voice (ElevenLabs)</option>
+          <option value="device">iPad voice</option>
+        </select>
+        <small>The cloud voice sounds natural. The iPad voice is free and works offline.</small>
+      </div>
+      <label class="check"><input id="sFx" type="checkbox"> System speaker effect (cloud voice)</label>
+      <div class="field">
+        <label for="sVoice">iPad voice</label>
         <select id="sVoice"></select>
-        <small>For a smoother voice, download an Enhanced voice in iPad Settings › Accessibility › Spoken Content › Voices.</small>
+        <small>Used when the engine is set to iPad voice, or if the cloud voice is unavailable. Pitch applies to the iPad voice only.</small>
       </div>
       <div class="row">
         <div class="field">
@@ -242,7 +251,7 @@
 <script>
 (() => {
   const KEY = "dot.v1";
-  const DEFAULTS = { workerUrl: "", accessCode: "", callsign: "Floyd", voiceURI: "", rate: 1, pitch: 0.9, autoSpeak: true, notes: "" };
+  const DEFAULTS = { workerUrl: "", accessCode: "", callsign: "Floyd", voiceURI: "", rate: 1, pitch: 0.9, autoSpeak: true, notes: "", engine: "cloud", fx: true };
   const $ = (id) => document.getElementById(id);
   const logEl = $("log"), statusEl = $("status"), liveEl = $("live");
 
@@ -390,13 +399,87 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
   if (synth) { loadVoices(); synth.onvoiceschanged = loadVoices; }
 
   function unlockSpeech() {
+    unlockAudio();
     if (unlocked || !synth) return;
     const u = new SpeechSynthesisUtterance(" ");
     u.volume = 0; synth.speak(u); unlocked = true;
   }
+  // Cloud voice through the Worker, played with Web Audio
+  let actx = null, current = null, audioUnlocked = false, cloudWarned = false;
+  function audioCtx() {
+    if (!actx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) actx = new AC(); }
+    return actx;
+  }
+  function unlockAudio() {
+    const c = audioCtx();
+    if (!c) return;
+    if (c.state === "suspended") c.resume();
+    if (!audioUnlocked) {
+      const b = c.createBuffer(1, 1, 22050), src = c.createBufferSource();
+      src.buffer = b; src.connect(c.destination); src.start(0);
+      audioUnlocked = true;
+    }
+  }
+  function stopAudio() {
+    if (current) { try { current.stop(); } catch (e) {} current = null; }
+    if (synth) synth.cancel();
+  }
+  function chain(c, src, fx) {
+    const out = c.createDynamicsCompressor();
+    out.threshold.value = -18; out.ratio.value = 3;
+    out.connect(c.destination);
+    if (!fx) { src.connect(out); return; }
+    const hp = c.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 180;
+    const lp = c.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 6500;
+    const pk = c.createBiquadFilter(); pk.type = "peaking"; pk.frequency.value = 2500; pk.Q.value = 1.2; pk.gain.value = 4;
+    src.connect(hp); hp.connect(lp); lp.connect(pk);
+    const dry = c.createGain(); dry.gain.value = 0.85;
+    pk.connect(dry); dry.connect(out);
+    const dl = c.createDelay(0.05); dl.delayTime.value = 0.009;
+    const fb = c.createGain(); fb.gain.value = 0.35;
+    const wet = c.createGain(); wet.gain.value = 0.22;
+    pk.connect(dl); dl.connect(fb); fb.connect(dl); dl.connect(wet); wet.connect(out);
+  }
+  async function speakCloud(text, s) {
+    const c = audioCtx();
+    if (!c) throw new Error("audio playback is not supported here");
+    if (!s.workerUrl) throw new Error("no Worker address");
+    const r = await fetch(s.workerUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Access-Code": s.accessCode || "" },
+      body: JSON.stringify({ action: "tts", text, speed: Math.max(0.7, Math.min(1.2, Number(s.rate) || 1)) })
+    });
+    if (!r.ok) {
+      let d = {};
+      try { d = await r.json(); } catch (e) {}
+      throw new Error(d.error || "voice error " + r.status);
+    }
+    const buf = await r.arrayBuffer();
+    const audio = await new Promise((res, rej) => c.decodeAudioData(buf, res, rej));
+    if (c.state === "suspended") await c.resume();
+    const src = c.createBufferSource();
+    src.buffer = audio;
+    chain(c, src, s.fx);
+    src.onended = () => { if (current === src) { current = null; setMode("idle"); } };
+    current = src;
+    setMode("speaking");
+    src.start(0);
+  }
   function speak(text, opts) {
     const s = { ...state.settings, ...(opts || {}) };
-    if (!synth || !s.autoSpeak) { setMode("idle"); return; }
+    if (!s.autoSpeak) { setMode("idle"); return; }
+    stopAudio();
+    if (s.engine === "cloud") {
+      speakCloud(text, s).catch((e) => {
+        if (!cloudWarned) { note("Cloud voice unavailable (" + e.message + "). Using the iPad voice."); cloudWarned = true; }
+        speakDevice(text, s);
+      });
+      return;
+    }
+    speakDevice(text, s);
+  }
+  function speakDevice(text, s) {
+    if (!synth) { setMode("idle"); return; }
     synth.cancel();
     const u = new SpeechSynthesisUtterance(text);
     const v = voices.find((x) => x.voiceURI === s.voiceURI);
@@ -415,7 +498,7 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
     unlockSpeech();
     if (document.body.dataset.mode === "listening" && rec) { rec.stop(); return; }
     if (busy) return;
-    if (synth) synth.cancel();
+    stopAudio();
     if (!SR) { note("Voice input isn’t available in this browser. Type your message below."); return; }
     rec = new SR();
     rec.lang = "en-US"; rec.interimResults = true; rec.continuous = false;
@@ -451,6 +534,7 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
     const s = state.settings;
     $("sWorker").value = s.workerUrl; $("sCode").value = s.accessCode; $("sName").value = s.callsign;
     $("sRate").value = s.rate; $("sPitch").value = s.pitch; $("sSpeak").checked = s.autoSpeak; $("sNotes").value = s.notes;
+    $("sEngine").value = s.engine; $("sFx").checked = s.fx;
     loadVoices();
     if (!dlg.open) dlg.showModal();
   }
@@ -463,7 +547,9 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
       rate: Number($("sRate").value),
       pitch: Number($("sPitch").value),
       autoSpeak: $("sSpeak").checked,
-      notes: $("sNotes").value.trim()
+      notes: $("sNotes").value.trim(),
+      engine: $("sEngine").value,
+      fx: $("sFx").checked
     };
   }
   $("openSettings").onclick = openSettings;
