@@ -93,6 +93,7 @@
   body[data-mode="thinking"] .ring-arc2 { animation: spin 1.3s linear infinite; }
   body[data-mode="speaking"] .glow { animation: talk .45s ease-in-out infinite alternate; opacity: .85; }
 
+  body.vu .glow, body.vu .ring-outer, body.vu .ring-arc, body.vu .ring-arc2 { animation: none !important; }
   @media (prefers-reduced-motion: reduce) {
     .orb * { animation: none !important; }
   }
@@ -502,6 +503,7 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
     }
   }
   function stopAudio() {
+    stopVU();
     if (current) { try { current.stop(); } catch (e) {} current = null; }
     if (synth) synth.cancel();
   }
@@ -509,7 +511,10 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
     const out = c.createDynamicsCompressor();
     out.threshold.value = -18; out.ratio.value = 3;
     out.connect(c.destination);
-    if (!fx) { src.connect(out); return; }
+    const an = c.createAnalyser();
+    an.fftSize = 512;
+    out.connect(an);
+    if (!fx) { src.connect(out); return an; }
     const hp = c.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 180;
     const lp = c.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 6500;
     const pk = c.createBiquadFilter(); pk.type = "peaking"; pk.frequency.value = 2500; pk.Q.value = 1.2; pk.gain.value = 4;
@@ -520,6 +525,44 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
     const fb = c.createGain(); fb.gain.value = 0.35;
     const wet = c.createGain(); wet.gain.value = 0.22;
     pk.connect(dl); dl.connect(fb); fb.connect(dl); dl.connect(wet); wet.connect(out);
+    return an;
+  }
+
+  // Live orb: pulses with the actual loudness of her voice
+  const q = (sel) => document.querySelector(sel);
+  const orbEls = { glow: q(".glow"), dot: q(".dot"), hot: q(".dot-hot"), outer: q(".ring-outer"), arcs: [q(".ring-arc"), q(".ring-arc2")] };
+  const reduceMotion = !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
+  let vuRaf = 0;
+  function startVU(an) {
+    if (reduceMotion || !an) return;
+    stopVU();
+    document.body.classList.add("vu");
+    const buf = new Uint8Array(an.fftSize);
+    let lvl = 0, ang = 0;
+    const tick = () => {
+      an.getByteTimeDomainData(buf);
+      let sum = 0;
+      for (let i = 0; i < buf.length; i++) { const v = (buf[i] - 128) / 128; sum += v * v; }
+      const target = Math.min(1, Math.sqrt(sum / buf.length) * 4.5);
+      lvl += (target - lvl) * (target > lvl ? 0.5 : 0.12);
+      ang += 0.3 + lvl * 5;
+      orbEls.glow.style.transform = "scale(" + (1 + lvl * 0.9).toFixed(3) + ")";
+      orbEls.glow.style.opacity = (0.4 + lvl * 0.6).toFixed(2);
+      orbEls.dot.style.transform = "scale(" + (1 + lvl * 0.22).toFixed(3) + ")";
+      orbEls.hot.style.transform = "scale(" + (1 + lvl * 0.45).toFixed(3) + ")";
+      orbEls.outer.style.stroke = "var(--amber)";
+      orbEls.outer.style.opacity = (0.5 + lvl * 0.5).toFixed(2);
+      orbEls.outer.style.strokeWidth = (1.5 + lvl * 1.5).toFixed(2);
+      orbEls.arcs[0].style.transform = "rotate(" + ang.toFixed(1) + "deg)";
+      orbEls.arcs[1].style.transform = "rotate(" + (-ang * 0.6).toFixed(1) + "deg)";
+      vuRaf = requestAnimationFrame(tick);
+    };
+    tick();
+  }
+  function stopVU() {
+    cancelAnimationFrame(vuRaf); vuRaf = 0;
+    document.body.classList.remove("vu");
+    [orbEls.glow, orbEls.dot, orbEls.hot, orbEls.outer, ...orbEls.arcs].forEach((e) => e && e.removeAttribute("style"));
   }
   async function speakCloud(text, s) {
     const c = audioCtx();
@@ -540,11 +583,12 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
     if (c.state === "suspended") await c.resume();
     const src = c.createBufferSource();
     src.buffer = audio;
-    chain(c, src, s.fx);
-    src.onended = () => { if (current === src) { current = null; doneSpeaking(); } };
+    const an = chain(c, src, s.fx);
+    src.onended = () => { if (current === src) { current = null; stopVU(); doneSpeaking(); } };
     current = src;
     setMode("speaking");
     src.start(0);
+    startVU(an);
   }
   function speak(text, opts) {
     const s = { ...state.settings, ...(opts || {}) };
