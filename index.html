@@ -236,6 +236,16 @@
       <label class="check"><input id="sSpeak" type="checkbox"> Speak replies aloud</label>
       <label class="check"><input id="sConvo" type="checkbox"> Conversation mode: keep listening after DOT speaks</label>
       <small style="color:var(--muted);margin-top:-10px;font-size:.85rem">Works in a Safari tab. Say “that’s all” to end the conversation.</small>
+      <h2 style="font-size:1.05rem;margin-top:6px">Silver stack</h2>
+      <div class="row">
+        <div class="field"><label for="sOz">Ounces held</label><input id="sOz" type="text" inputmode="decimal"></div>
+        <div class="field"><label for="sGoal">Goal (oz)</label><input id="sGoal" type="text" inputmode="decimal"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="sWin">Buying window (days)</label><input id="sWin" type="text" placeholder="1-8"></div>
+        <div class="field"><label for="sPrem">Dealer premium ($/oz)</label><input id="sPrem" type="text" inputmode="decimal"></div>
+      </div>
+      <label class="check"><input id="sDaily" type="checkbox"> Offer my silver report the first time I open DOT each day</label>
       <div class="field">
         <label for="sNotes">What DOT should know about you</label>
         <textarea id="sNotes" placeholder="Background, routines, priorities, how you like information delivered."></textarea>
@@ -254,7 +264,7 @@
 <script>
 (() => {
   const KEY = "dot.v1";
-  const DEFAULTS = { workerUrl: "", accessCode: "", callsign: "Floyd", voiceURI: "", rate: 1, pitch: 0.9, autoSpeak: true, notes: "", engine: "cloud", fx: true, convo: false };
+  const DEFAULTS = { workerUrl: "", accessCode: "", callsign: "Floyd", voiceURI: "", rate: 1, pitch: 0.9, autoSpeak: true, notes: "", engine: "cloud", fx: true, convo: false, stackOz: 32, stackGoal: 200, buyWindow: "1-8", premium: 5, dailyReport: true };
   const $ = (id) => document.getElementById(id);
   const logEl = $("log"), statusEl = $("status"), liveEl = $("live");
 
@@ -287,8 +297,24 @@
     }
     return p;
   }
+  function reportDue() {
+    const s = state.settings;
+    return s.dailyReport && s.workerUrl && localStorage.getItem("dot.reportDate") !== todayStr() && new Date().getHours() >= 4;
+  }
+  function reportButton() {
+    const b = document.createElement("button");
+    b.className = "btn primary"; b.style.alignSelf = "flex-start";
+    b.textContent = "Morning silver report ready. Tap to hear it.";
+    b.onclick = () => {
+      try { localStorage.setItem("dot.reportDate", todayStr()); } catch (e) {}
+      b.remove(); unlockSpeech(); lastInputVoice = false;
+      ask("Give me my morning silver report.");
+    };
+    return b;
+  }
   function render() {
     logEl.innerHTML = "";
+    if (reportDue()) logEl.append(reportButton());
     if (!state.history.length) {
       const p = document.createElement("p");
       p.className = "msg empty";
@@ -341,6 +367,12 @@ When ${name} asks you to remember something, or clearly states a lasting fact or
 MEMO: the fact in one short sentence
 Use MEMO only for things worth keeping long term. Never read the MEMO line aloud or mention it; the system removes it and saves it to his standing information.`,
 
+      `SILVER STACK
+${name} currently holds ${s.stackOz} ounces of silver toward a goal of ${s.stackGoal} ounces. His buying window is days ${s.buyWindow || "not set"} of each month.
+When he reports buying silver or gives a new total, confirm it and add one final separate line in exactly this form, with the new total in ounces:
+STACK: 34
+Never read the STACK line aloud or mention it; the system removes it and updates his holdings. Do not also write a MEMO for silver holdings.`,
+
       `Honesty outranks agreement. If a plan carries risk, state the risk plainly and respectfully, then help.`,
 
       `FORMAT
@@ -353,6 +385,22 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
 
   // ---------- talk to Claude via the Worker ----------
   let busy = false, lastInputVoice = false;
+  const MKEY = "dot.metals";
+  const todayStr = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+  function loadMetals() { try { return JSON.parse(localStorage.getItem(MKEY)) || {}; } catch (e) { return {}; } }
+  function saveMetals(m) { try { localStorage.setItem(MKEY, JSON.stringify(m)); } catch (e) {} }
+  function priorSilver() {
+    const m = loadMetals();
+    if (m.today && m.today.date !== todayStr()) return m.today;
+    return m.prev || null;
+  }
+  function recordSilver(snap) {
+    if (!snap || !(snap.silver > 0)) return;
+    const m = loadMetals(), t = todayStr();
+    if (m.today && m.today.date !== t) m.prev = m.today;
+    m.today = { date: t, price: snap.silver };
+    saveMetals(m);
+  }
   const END_CONVO = /\b(that'?s all|that will be all|stop listening|goodbye|good night|end conversation)\b/i;
   function doneSpeaking() {
     setMode("idle");
@@ -374,7 +422,8 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
       const r = await fetch(s.workerUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Access-Code": s.accessCode || "" },
-        body: JSON.stringify({ system: systemPrompt(), messages })
+        body: JSON.stringify({ system: systemPrompt(), messages, prior_silver: priorSilver(),
+          stack: { holdings: s.stackOz, goal: s.stackGoal, window: s.buyWindow, premium: s.premium } })
       });
       let data = {};
       try { data = await r.json(); } catch (e) {}
@@ -382,6 +431,10 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
       let reply = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n").trim() || "No response received.";
       const memos = [];
       reply = reply.replace(/^\s*MEMO:\s*(.+)$/gim, (m, fact) => { memos.push(fact.trim()); return ""; }).trim() || "Noted.";
+      let stackNew = null;
+      reply = reply.replace(/^\s*STACK:\s*([\d.]+).*$/gim, (m, n) => { stackNew = Number(n); return ""; }).trim() || "Noted.";
+      if (stackNew !== null && !isNaN(stackNew)) state.settings.stackOz = stackNew;
+      recordSilver(data.metals);
       if (memos.length) {
         state.settings.notes = (state.settings.notes ? state.settings.notes + "\n" : "") + memos.map((f) => "- " + f).join("\n");
       }
@@ -389,6 +442,7 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
       if (state.history.length > 200) state.history = state.history.slice(-200);
       save();
       logEl.append(msgEl("assistant", reply));
+      if (stackNew !== null && !isNaN(stackNew)) { const p = document.createElement("p"); p.className = "msg memo"; p.textContent = "Silver stack updated: " + stackNew + " oz"; logEl.append(p); }
       memos.forEach((f) => { const p = document.createElement("p"); p.className = "msg memo"; p.textContent = "Saved to memory: " + f; logEl.append(p); });
       scrollDown();
       speak(reply);
@@ -563,6 +617,7 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
     $("sWorker").value = s.workerUrl; $("sCode").value = s.accessCode; $("sName").value = s.callsign;
     $("sRate").value = s.rate; $("sPitch").value = s.pitch; $("sSpeak").checked = s.autoSpeak; $("sNotes").value = s.notes;
     $("sEngine").value = s.engine; $("sFx").checked = s.fx; $("sConvo").checked = s.convo;
+    $("sOz").value = s.stackOz; $("sGoal").value = s.stackGoal; $("sWin").value = s.buyWindow; $("sPrem").value = s.premium; $("sDaily").checked = s.dailyReport;
     loadVoices();
     if (!dlg.open) dlg.showModal();
   }
@@ -578,7 +633,12 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
       notes: $("sNotes").value.trim(),
       engine: $("sEngine").value,
       fx: $("sFx").checked,
-      convo: $("sConvo").checked
+      convo: $("sConvo").checked,
+      stackOz: Number($("sOz").value) || 0,
+      stackGoal: Number($("sGoal").value) || 200,
+      buyWindow: $("sWin").value.trim(),
+      premium: Number($("sPrem").value) || 0,
+      dailyReport: $("sDaily").checked
     };
   }
   $("openSettings").onclick = openSettings;
