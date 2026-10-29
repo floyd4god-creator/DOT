@@ -110,6 +110,7 @@
   .msg.dot .who { font: 600 .8rem/1 var(--display); color: var(--amber); letter-spacing: .08em; display: block; margin-bottom: 4px; }
   .msg.user { align-self: flex-end; text-align: right; color: var(--muted); }
   .msg.note { color: var(--alert); font-size: .95rem; }
+  .msg.memo { color: var(--amber); font-size: .9rem; opacity: .85; }
   .msg.empty { color: var(--muted); margin: auto 0; text-align: center; align-self: center; }
 
   footer { display: flex; align-items: center; gap: 10px; padding: 10px 0 14px; }
@@ -233,6 +234,8 @@
         </div>
       </div>
       <label class="check"><input id="sSpeak" type="checkbox"> Speak replies aloud</label>
+      <label class="check"><input id="sConvo" type="checkbox"> Conversation mode: keep listening after DOT speaks</label>
+      <small style="color:var(--muted);margin-top:-10px;font-size:.85rem">Works in a Safari tab. Say “that’s all” to end the conversation.</small>
       <div class="field">
         <label for="sNotes">What DOT should know about you</label>
         <textarea id="sNotes" placeholder="Background, routines, priorities, how you like information delivered."></textarea>
@@ -251,7 +254,7 @@
 <script>
 (() => {
   const KEY = "dot.v1";
-  const DEFAULTS = { workerUrl: "", accessCode: "", callsign: "Floyd", voiceURI: "", rate: 1, pitch: 0.9, autoSpeak: true, notes: "", engine: "cloud", fx: true };
+  const DEFAULTS = { workerUrl: "", accessCode: "", callsign: "Floyd", voiceURI: "", rate: 1, pitch: 0.9, autoSpeak: true, notes: "", engine: "cloud", fx: true, convo: false };
   const $ = (id) => document.getElementById(id);
   const logEl = $("log"), statusEl = $("status"), liveEl = $("live");
 
@@ -325,21 +328,38 @@ Address the user as ${name}. Occasionally, not every time, close with a short li
 3. Separate fact from judgment. Label verified facts as "Confirmed" when it helps, and label your judgment as "My assessment."
 4. Do not give percentages or probabilities unless they come from real data you retrieved, such as a rain forecast. Never invent statistics.
 5. If a request is unclear, ask one short clarifying question instead of guessing what was meant.
-6. The current date and time given below is authoritative. Do not correct it or question it.
-7. If you made an error earlier in the conversation, correct it once, briefly, and move on.`,
+6. If you made an error earlier in the conversation, correct it once, briefly, and move on.`,
+
+      `INTERACTION
+Be conversational and engaged, not just responsive. When it fits, end with one short, relevant follow-up question or offer a useful next step. Do this often but not on every reply, and never ask more than one question at a time.
+Use what you know about ${name} from his standing information and this conversation to make answers personal and specific to him.
+If he seems to be thinking out loud or working through a decision, help him think: ask what outcome he wants, or name the key tradeoff.
+Keep any banter light and brief, then get back to the point.`,
+
+      `MEMORY
+When ${name} asks you to remember something, or clearly states a lasting fact or preference he wants kept, confirm it briefly in your reply and then add one final separate line in exactly this form:
+MEMO: the fact in one short sentence
+Use MEMO only for things worth keeping long term. Never read the MEMO line aloud or mention it; the system removes it and saves it to his standing information.`,
 
       `Honesty outranks agreement. If a plan carries risk, state the risk plainly and respectfully, then help.`,
 
       `FORMAT
 Your replies are spoken aloud. Keep most answers to one to four sentences unless ${name} asks for more detail. Never use markdown, bullet points, headings, emoji, or web addresses. Write numbers, times, and abbreviations the way they should be spoken.`,
 
-      `Current local date and time: ${now}. Time zone: Pacific.`,
+      `For reference only: the current local date and time is ${now}, Pacific time. Do not state the date or time unless ${name} asks for it or the task genuinely depends on it, such as scheduling. Never comment on or correct a time you gave earlier.`,
       s.notes ? `Standing information from ${name}:\n${s.notes}` : ""
     ].filter(Boolean).join("\n\n");
   }
 
   // ---------- talk to Claude via the Worker ----------
-  let busy = false;
+  let busy = false, lastInputVoice = false;
+  const END_CONVO = /\b(that'?s all|that will be all|stop listening|goodbye|good night|end conversation)\b/i;
+  function doneSpeaking() {
+    setMode("idle");
+    if (state.settings.convo && lastInputVoice && SR && !navigator.standalone) {
+      setTimeout(() => { if (document.body.dataset.mode === "idle" && !busy) toggleListening(); }, 500);
+    }
+  }
   async function ask(text) {
     text = text.trim();
     if (!text || busy) return;
@@ -359,11 +379,18 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
       let data = {};
       try { data = await r.json(); } catch (e) {}
       if (!r.ok) throw new Error(data.error || `The Worker answered with status ${r.status}.`);
-      const reply = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n").trim() || "No response received.";
+      let reply = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n").trim() || "No response received.";
+      const memos = [];
+      reply = reply.replace(/^\s*MEMO:\s*(.+)$/gim, (m, fact) => { memos.push(fact.trim()); return ""; }).trim() || "Noted.";
+      if (memos.length) {
+        state.settings.notes = (state.settings.notes ? state.settings.notes + "\n" : "") + memos.map((f) => "- " + f).join("\n");
+      }
       state.history.push({ role: "user", content: text }, { role: "assistant", content: reply });
       if (state.history.length > 200) state.history = state.history.slice(-200);
       save();
-      logEl.append(msgEl("assistant", reply)); scrollDown();
+      logEl.append(msgEl("assistant", reply));
+      memos.forEach((f) => { const p = document.createElement("p"); p.className = "msg memo"; p.textContent = "Saved to memory: " + f; logEl.append(p); });
+      scrollDown();
       speak(reply);
     } catch (e) {
       const msg = e instanceof TypeError
@@ -460,7 +487,7 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
     const src = c.createBufferSource();
     src.buffer = audio;
     chain(c, src, s.fx);
-    src.onended = () => { if (current === src) { current = null; setMode("idle"); } };
+    src.onended = () => { if (current === src) { current = null; doneSpeaking(); } };
     current = src;
     setMode("speaking");
     src.start(0);
@@ -487,7 +514,7 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
     u.rate = Number(s.rate) || 1;
     u.pitch = Number(s.pitch) || 1;
     u.onstart = () => setMode("speaking");
-    u.onend = u.onerror = () => setMode("idle");
+    u.onend = u.onerror = () => doneSpeaking();
     synth.speak(u);
   }
 
@@ -522,7 +549,8 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
       const heard = (finalText.trim() || lastHeard).trim();
       liveEl.textContent = "";
       rec = null;
-      if (heard) ask(heard); else setMode("idle");
+      if (heard) { lastInputVoice = !END_CONVO.test(heard); ask(heard); }
+      else { lastInputVoice = false; setMode("idle"); }
     };
     try { rec.start(); setMode("listening"); }
     catch (e) { note("Couldn’t start the microphone. Try again."); setMode("idle"); }
@@ -534,7 +562,7 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
     const s = state.settings;
     $("sWorker").value = s.workerUrl; $("sCode").value = s.accessCode; $("sName").value = s.callsign;
     $("sRate").value = s.rate; $("sPitch").value = s.pitch; $("sSpeak").checked = s.autoSpeak; $("sNotes").value = s.notes;
-    $("sEngine").value = s.engine; $("sFx").checked = s.fx;
+    $("sEngine").value = s.engine; $("sFx").checked = s.fx; $("sConvo").checked = s.convo;
     loadVoices();
     if (!dlg.open) dlg.showModal();
   }
@@ -549,7 +577,8 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
       autoSpeak: $("sSpeak").checked,
       notes: $("sNotes").value.trim(),
       engine: $("sEngine").value,
-      fx: $("sFx").checked
+      fx: $("sFx").checked,
+      convo: $("sConvo").checked
     };
   }
   $("openSettings").onclick = openSettings;
@@ -562,7 +591,7 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
 
   // ---------- inputs ----------
   $("micBtn").onclick = toggleListening;
-  const send = () => { unlockSpeech(); const t = $("textIn").value; $("textIn").value = ""; ask(t); };
+  const send = () => { unlockSpeech(); lastInputVoice = false; const t = $("textIn").value; $("textIn").value = ""; ask(t); };
   $("sendBtn").onclick = send;
   $("textIn").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); send(); } });
 
