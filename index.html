@@ -561,7 +561,8 @@
     if (cmd === "DEBT_ADD") {
       const name = parts[0], bal = num(parts[1]);
       if (!name || bal === null) return null;
-      const d = { id: state.nextId++, name, balance: bal, start: bal, apr: num(parts[2]), min: num(parts[3]), plan: null, payments: [] };
+      const st = num(parts[4]);
+      const d = { id: state.nextId++, name, balance: bal, start: st !== null && st > bal ? st : bal, apr: num(parts[2]), min: num(parts[3]), plan: null, payments: [] };
       state.debts.push(d);
       return "Debt added: " + name + ", " + money(bal) + " — " + payoffText(d);
     }
@@ -793,13 +794,13 @@ When he asks what is on his list, read the open items briefly, overdue and due-t
 Figures below were entered by ${name} or calculated exactly by the app:
 ${debtsForPrompt()}
 To change debts, add one line per change at the very end of your reply, in exactly these forms:
-DEBT_ADD: name | balance | interest rate percent | minimum monthly payment
+DEBT_ADD: name | balance | interest rate percent | minimum monthly payment | starting balance
 DEBT_PAY: id | amount
 DEBT_BALANCE: id | new balance
 DEBT_TERMS: id | interest rate percent | minimum monthly payment
 DEBT_PLAN: id | planned monthly payment
 DEBT_DELETE: id
-Use only numbers he states; leave a field empty if he did not give it, and ask for the missing interest rate or minimum payment. Never read these lines aloud or mention them.
+The starting balance field is optional; include it only when he gives one, so progress already made is kept. Use only numbers he states; leave a field empty if he did not give it, and ask for the missing interest rate or minimum payment. Never read these lines aloud or mention them.
 Report balances, totals, percentages, and payoff dates exactly as listed above. Never calculate your own payoff dates, interest, or what-if results. If he asks a what-if, such as paying more each month, record it with DEBT_PLAN and tell him the new estimate will appear on screen. You may explain the avalanche method (highest interest rate first) and snowball method (smallest balance first) and say which debt each would target, using the list above. Celebrate paid-off debts briefly. This is tracking help, not financial advice.`,
 
       `SILVER STACK
