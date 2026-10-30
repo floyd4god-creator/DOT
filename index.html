@@ -398,6 +398,11 @@
           <option value="esv">English Standard Version (ESV, needs a key)</option>
         </select>
       </div>
+      <div class="field">
+        <label for="sEpisodes">The Deep Dive: people already covered</label>
+        <textarea id="sEpisodes" placeholder="One name per line"></textarea>
+        <small>DOT uses this to avoid repeats and suggest your next guest. She adds names when you tell her an episode is finished.</small>
+      </div>
       <h2 style="font-size:1.05rem;margin-top:6px">Silver stack</h2>
       <div class="row">
         <div class="field"><label for="sOz">Ounces held</label><input id="sOz" type="text" inputmode="decimal"></div>
@@ -426,7 +431,7 @@
 <script>
 (() => {
   const KEY = "dot.v1";
-  const DEFAULTS = { workerUrl: "", accessCode: "", callsign: "Floyd", voiceURI: "", rate: 1, pitch: 0.9, autoSpeak: true, notes: "", engine: "cloud", fx: true, convo: false, stackOz: 32, stackGoal: 200, buyWindow: "1-8", premium: 5, dailyReport: true, palette: "holo", bible: "kjv" };
+  const DEFAULTS = { workerUrl: "", accessCode: "", callsign: "Floyd", voiceURI: "", rate: 1, pitch: 0.9, autoSpeak: true, notes: "", engine: "cloud", fx: true, convo: false, stackOz: 32, stackGoal: 200, buyWindow: "1-8", premium: 5, dailyReport: true, palette: "holo", bible: "kjv", episodes: "Robert Smalls\nRobert Emmett Fletcher Jr.\nKate Warne\nBilly Mitchell\nEugene Bullard" };
   const $ = (id) => document.getElementById(id);
   const logEl = $("log"), statusEl = $("status"), liveEl = $("live");
 
@@ -778,6 +783,21 @@ His preferred Bible translation code is ${s.bible || "kjv"}; use it unless he na
 For sermon or lesson outlines, Bible study questions, devotionals, or any written material longer than a few sentences, put it inside a block that starts on its own line with [[OUTLINE: short title]] and ends on its own line with [[/OUTLINE]]. Inside the block, write clean plain text: numbered main lines and indented lines starting with a dash, with no asterisks or pound signs. Outside the block, say in one or two spoken sentences what you prepared and offer a next step.
 A sermon outline includes: title, text, the big idea in one sentence, an introduction hook, about three main points each with supporting scripture references and an application, an illustration idea, and a conclusion with a call to response. Cite references for supporting verses; quote word for word only what you looked up. Where Christians differ in interpretation, note it briefly and fairly rather than taking sides, and follow his own tradition when he states it.`,
 
+      `THE DEEP DIVE PODCAST RESEARCH
+${name} produces a podcast called The Deep Dive: three hosts in conversation examine the lives of people, past and present, for truths, lessons, and insights. People already covered: ${(s.episodes || "none listed").split(/\n+/).filter(Boolean).join("; ")}.
+When he asks for a research briefing on someone, research with web search first. Then put the briefing in an outline block titled with the person's name and include, in this order:
+1. Who they were, in three or four sentences.
+2. Timeline: eight to twelve key dates, each with the source in parentheses, such as (Smithsonian) or (National Archives).
+3. Turning points: three to five moments that changed the course of their life, and why.
+4. Little-known details that will surprise listeners, each sourced.
+5. Truths and lessons for today, labeled as your assessment.
+6. Conversation starters: five questions the three hosts can debate.
+7. Three host angles: a distinct perspective each host could bring.
+8. Verify before recording: any claim where sources disagree or that you could not confirm, stated plainly.
+Prefer museums, archives, universities, government records, and established historians over blogs. Never fill a gap with a plausible detail; if a date or fact cannot be confirmed, list it under Verify before recording instead. Outside the block, speak one or two sentences summarizing the person and offer a next step.
+When he asks for guest ideas, suggest people not already covered who fit the show's theme, with one sentence each on why their story carries a lesson, and note any connection to past episodes.
+When he says an episode is finished, add one final separate line in exactly this form: EPISODE: full name. Never read it aloud.`,
+
       `TO-DO LIST AND NOTES
 ${listForPrompt()}
 To change the list or notes, add one line per change at the very end of your reply, each on its own line, in exactly these forms:
@@ -867,6 +887,12 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
       let reply = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n").trim() || "No response received.";
       const memos = [];
       reply = reply.replace(/^\s*MEMO:\s*(.+)$/gim, (m, fact) => { memos.push(fact.trim()); return ""; }).trim() || "Noted.";
+      const epMsgs = [];
+      reply = reply.replace(/^\s*EPISODE:\s*(.+)$/gim, (m, nm) => {
+        const n = nm.trim(), list = (state.settings.episodes || "").split(/\n+/).filter(Boolean);
+        if (n && !list.some((x) => x.toLowerCase() === n.toLowerCase())) { list.push(n); state.settings.episodes = list.join("\n"); epMsgs.push("Added to The Deep Dive episode list: " + n); }
+        return "";
+      }).trim() || "Done.";
       let stackNew = null;
       reply = reply.replace(/^\s*STACK:\s*([\d.]+).*$/gim, (m, n) => { stackNew = Number(n); return ""; }).trim() || "Noted.";
       if (stackNew !== null && !isNaN(stackNew)) state.settings.stackOz = stackNew;
@@ -888,6 +914,7 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
       logEl.append(msgEl("assistant", reply, meta));
       if (stackNew !== null && !isNaN(stackNew)) { const p = document.createElement("p"); p.className = "msg memo"; p.textContent = "Silver stack updated: " + stackNew + " oz"; logEl.append(p); }
       memos.forEach((f) => { const p = document.createElement("p"); p.className = "msg memo"; p.textContent = "Saved to memory: " + f; logEl.append(p); });
+      epMsgs.forEach((t) => listChanges.push(t));
       listChanges.forEach((t) => { const p = document.createElement("p"); p.className = "msg memo"; p.textContent = t; logEl.append(p); });
       if (listChanges.length) { renderList(); renderDebts(); }
       scrollDown();
@@ -1175,7 +1202,7 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
     $("sWorker").value = s.workerUrl; $("sCode").value = s.accessCode; $("sName").value = s.callsign;
     $("sRate").value = s.rate; $("sPitch").value = s.pitch; $("sSpeak").checked = s.autoSpeak; $("sNotes").value = s.notes;
     $("sEngine").value = s.engine; $("sFx").checked = s.fx; $("sConvo").checked = s.convo;
-    $("sOz").value = s.stackOz; $("sGoal").value = s.stackGoal; $("sWin").value = s.buyWindow; $("sPrem").value = s.premium; $("sDaily").checked = s.dailyReport; $("sPalette").value = s.palette; $("sBible").value = s.bible;
+    $("sOz").value = s.stackOz; $("sGoal").value = s.stackGoal; $("sWin").value = s.buyWindow; $("sPrem").value = s.premium; $("sDaily").checked = s.dailyReport; $("sPalette").value = s.palette; $("sBible").value = s.bible; $("sEpisodes").value = s.episodes || "";
     loadVoices();
     if (!dlg.open) dlg.showModal();
   }
@@ -1198,7 +1225,8 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
       premium: Number($("sPrem").value) || 0,
       dailyReport: $("sDaily").checked,
       palette: $("sPalette").value,
-      bible: $("sBible").value
+      bible: $("sBible").value,
+      episodes: $("sEpisodes").value.trim()
     };
   }
   $("openSettings").onclick = openSettings;
