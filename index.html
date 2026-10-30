@@ -938,16 +938,33 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
     if (!actx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) actx = new AC(); }
     return actx;
   }
+  // Wake the audio system. iPad pauses it ("suspended" or "interrupted") after backgrounding
+  // or when another app uses the speaker; it can only be restarted from a tap or key press.
   function unlockAudio() {
-    const c = audioCtx();
+    let c = audioCtx();
     if (!c) return;
-    if (c.state === "suspended") c.resume();
-    if (!audioUnlocked) {
+    if (c.state === "closed") { actx = null; c = audioCtx(); }
+    if (c.state !== "running") c.resume().catch(() => { try { c.close(); } catch (e) {} actx = null; });
+    try {
       const b = c.createBuffer(1, 1, 22050), src = c.createBufferSource();
       src.buffer = b; src.connect(c.destination); src.start(0);
-      audioUnlocked = true;
+    } catch (e) {}
+    audioUnlocked = true;
+  }
+  let pendingAudio = null;
+  function gestureWake() {
+    unlockAudio();
+    if (pendingAudio) {
+      const p = pendingAudio; pendingAudio = null; liveEl.textContent = "";
+      setTimeout(() => playBuffer(p.audio, p.s), 60);
     }
   }
+  ["pointerdown", "touchend", "keydown"].forEach((ev) => document.addEventListener(ev, gestureWake, true));
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) return;
+    if (synth) synth.cancel();
+    if (actx && actx.state !== "running") actx.resume().catch(() => {});
+  });
   function stopAudio() {
     stopVU();
     if (current) { try { current.stop(); } catch (e) {} current = null; }
@@ -1066,7 +1083,18 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
     }
     const buf = await r.arrayBuffer();
     const audio = await new Promise((res, rej) => c.decodeAudioData(buf, res, rej));
-    if (c.state === "suspended") await c.resume();
+    await playBuffer(audio, s);
+  }
+  async function playBuffer(audio, s) {
+    const c = audioCtx();
+    if (c.state !== "running") { try { await c.resume(); } catch (e) {} }
+    if (c.state !== "running") {
+      // Audio is paused by the iPad: hold her reply and play it on the next tap.
+      pendingAudio = { audio, s };
+      setMode("idle");
+      liveEl.textContent = "Voice paused by the iPad. Tap anywhere to hear her.";
+      return;
+    }
     const src = c.createBufferSource();
     src.buffer = audio;
     const an = chain(c, src, s.fx);
