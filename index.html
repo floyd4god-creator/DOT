@@ -647,7 +647,7 @@
   // ---------- log ----------
   function splitBlocks(text) {
     const blocks = [];
-    let spoken = String(text).replace(/\[\[OUTLINE:?\s*([^\]]*)\]\]([\s\S]*?)(?:\[\[\/OUTLINE\]\]|$)/gi, (m, title, body) => {
+    let spoken = String(text).replace(/\[\[\s*OUTLINE:?\s*([^\]]*)\]\]([\s\S]*?)(?:\[\[\s*\/\s*OUTLINE[^\]]*\]\]|$)/gi, (m, title, body) => {
       blocks.push({ title: title.trim() || "Outline", body: body.replace(/^\n+|\s+$/g, "") });
       return "";
     });
@@ -758,7 +758,7 @@ ${name} wants accurate information only, never guesses, even good ones.
 5. When you report something you looked up, say in a few words where it came from, such as "per the weather service," "according to Reuters," or "from your calendar." If sources disagree, say so.
 6. Keep facts and judgment separate. Opinions, outlooks, and recommendations must begin with "My assessment." Never present an assessment as fact, and never give percentages or probabilities unless they come directly from retrieved data, such as a rain forecast.
 7. If a request is unclear, ask one short clarifying question instead of assuming.
-8. If you realize you stated something unverified earlier, correct it once, briefly, and move on.
+8. Search results are not repeated in later turns, so instead your earlier replies that end with a bracketed "Verified at the time" note were checked with tools when you wrote them. Treat the facts in those replies as verified and supported by tool results, including under the capability update further below. Never retract, downgrade, or call them unverified just because the raw results are no longer visible; only correct one if you have a specific reason to believe it is wrong. Never write such bracketed notes yourself. If you realize you truly stated something unverified, correct it once, briefly, and move on.
 9. Being brief and saying "I do not know" is always better than being complete and wrong.`,
 
       `INTERACTION
@@ -873,7 +873,12 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
     const empty = logEl.querySelector(".empty"); if (empty) empty.remove();
     logEl.append(msgEl("user", text)); scrollDown();
     setMode("thinking");
-    const messages = [...state.history.slice(-20).map((m) => ({ role: m.role, content: m.content })), { role: "user", content: text }];
+    const verifiedNote = (m) => {
+      if (m.role !== "assistant" || !m.meta || !m.meta.checked || !m.meta.checked.length) return "";
+      const hosts = (m.meta.sources || []).map((x) => { try { return new URL(x.url).hostname.replace(/^www\./, ""); } catch (e) { return ""; } }).filter(Boolean);
+      return "\n\n[Verified at the time with: " + m.meta.checked.join(", ") + (hosts.length ? "; sources: " + hosts.join(", ") : "") + "]";
+    };
+    const messages = [...state.history.slice(-20).map((m) => ({ role: m.role, content: m.content + verifiedNote(m) })), { role: "user", content: text }];
     try {
       const r = await fetch(s.workerUrl, {
         method: "POST",
