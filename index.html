@@ -90,6 +90,24 @@
   }
   .icon-btn:hover { color: var(--text); border-color: var(--muted); }
   .brief-btn { width: auto; border-radius: 22px; padding: 0 14px 0 12px; gap: 6px; display: flex; align-items: center; color: var(--amber); border-color: color-mix(in srgb, var(--amber) 45%, var(--line)); font-weight: 500; }
+  .dsum { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .dsum div { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+  .dsum b { display: block; font: 600 1.05rem/1.25 var(--display); color: var(--amber); }
+  .dsum small { color: var(--muted); font-size: .78rem; }
+  .bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+  .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--deep), var(--amber)); border-radius: 4px; }
+  .dcard { border: 1px solid var(--line); border-left: 3px solid var(--amber); border-radius: 10px; padding: 12px; display: grid; gap: 8px; background: color-mix(in srgb, var(--bg) 70%, transparent); }
+  .dcard.paid { border-left-color: #3fd88a; opacity: .8; }
+  .dtop { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .dtop strong { font-family: var(--display); font-size: 1.05rem; }
+  .dtop .bal { font: 600 1.1rem var(--display); color: var(--amber); }
+  .dmeta { color: var(--muted); font-size: .82rem; }
+  .dact { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .dact input { width: 110px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .dact .btn { padding: 7px 10px; font-size: .85rem; }
+  .dadd { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .dadd input { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+  .dadd .wide { grid-column: 1 / -1; }
   .count { font-weight: 600; font-size: .8rem; min-width: 0; }
   .count:not(:empty) { background: var(--amber); color: var(--bg); border-radius: 10px; padding: 1px 7px; }
   .tlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
@@ -148,6 +166,8 @@
   .msg.user { align-self: flex-end; text-align: right; color: var(--muted); }
   .msg.note { color: var(--alert); font-size: .95rem; }
   .msg.memo { color: var(--amber); font-size: .9rem; opacity: .85; }
+  .srcs { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 6px; font-size: .78rem; color: var(--muted); }
+  .srcs a { color: var(--amber); text-decoration: none; border-bottom: 1px dotted currentColor; }
   .outline { margin-top: 10px; border: 1px solid color-mix(in srgb, var(--amber) 40%, var(--line)); border-radius: 10px; background: color-mix(in srgb, var(--panel) 85%, transparent); overflow: hidden; }
   .ohead { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
   .ohead strong { flex: 1; min-width: 140px; font-family: var(--display); color: var(--amber); letter-spacing: .02em; }
@@ -200,6 +220,10 @@
     <button class="icon-btn brief-btn" id="listBtn" aria-label="List and notes">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg>
       <span>List</span><b class="count" id="listCount"></b>
+    </button>
+    <button class="icon-btn brief-btn" id="debtBtn" aria-label="Debt payoff">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 2v20M17 6.5c0-1.9-2.2-3.5-5-3.5s-5 1.6-5 3.5 2.2 3.2 5 3.5 5 1.6 5 3.5-2.2 3.5-5 3.5-5-1.6-5-3.5"/></svg>
+      <span>Debts</span>
     </button>
     <button class="icon-btn brief-btn" id="briefBtn" aria-label="Briefing">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
@@ -276,15 +300,35 @@
     </button>
   </footer>
 
+  <dialog id="debtDlg">
+    <div class="sheet">
+      <h2 tabindex="-1" autofocus style="outline:none">Debt payoff</h2>
+      <div class="dsum" id="debtSummary"></div>
+      <div class="bar" id="debtBar"><i style="width:0%"></i></div>
+      <small id="debtNote" style="color:var(--muted)"></small>
+      <div id="debtList" style="display:grid;gap:10px"></div>
+      <h2 style="font-size:1.05rem">Add a debt</h2>
+      <div class="dadd">
+        <input id="dName" class="wide" type="text" placeholder="Name, such as Car loan">
+        <input id="dBal" type="text" inputmode="decimal" placeholder="Balance $">
+        <input id="dApr" type="text" inputmode="decimal" placeholder="Interest rate %">
+        <input id="dMin" type="text" inputmode="decimal" placeholder="Minimum payment $">
+        <button class="btn primary" id="dAdd">Add debt</button>
+      </div>
+      <small style="color:var(--muted)">Payments you log are subtracted from the balance. When a statement arrives, use Set balance so interest is reflected exactly. Stored only on this iPad.</small>
+      <div class="actions"><span></span><button class="btn primary" id="debtClose">Close</button></div>
+    </div>
+  </dialog>
+
   <dialog id="listDlg">
     <div class="sheet">
-      <h2>To-do list</h2>
+      <h2 tabindex="-1" autofocus style="outline:none">To-do list</h2>
       <div class="addrow"><input id="todoIn" type="text" placeholder="Add a task" enterkeyhint="done"><button class="btn primary" id="todoAdd">Add</button></div>
       <ul class="tlist" id="todoList"></ul>
       <h2 style="margin-top:8px">Notes</h2>
       <div class="addrow"><input id="noteIn" type="text" placeholder="Add a note" enterkeyhint="done"><button class="btn primary" id="noteAdd">Add</button></div>
       <ul class="tlist" id="noteList"></ul>
-      <div class="actions"><button class="btn" id="clearDone">Clear completed</button><button class="btn primary" id="listClose" autofocus>Close</button></div>
+      <div class="actions"><button class="btn" id="clearDone">Clear completed</button><button class="btn primary" id="listClose">Close</button></div>
     </div>
   </dialog>
 
@@ -391,9 +435,9 @@
     try {
       const s = JSON.parse(localStorage.getItem(KEY));
       if (s) return { settings: { ...DEFAULTS, ...s.settings }, history: Array.isArray(s.history) ? s.history : [],
-        todos: Array.isArray(s.todos) ? s.todos : [], qnotes: Array.isArray(s.qnotes) ? s.qnotes : [], nextId: s.nextId || 1 };
+        todos: Array.isArray(s.todos) ? s.todos : [], qnotes: Array.isArray(s.qnotes) ? s.qnotes : [], debts: Array.isArray(s.debts) ? s.debts : [], nextId: s.nextId || 1 };
     } catch (e) {}
-    return { settings: { ...DEFAULTS }, history: [], todos: [], qnotes: [], nextId: 1 };
+    return { settings: { ...DEFAULTS }, history: [], todos: [], qnotes: [], debts: [], nextId: 1 };
   }
   let state = load();
   function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
@@ -471,6 +515,116 @@
     const c = open.length; $("listCount").textContent = c ? String(c) : "";
   }
 
+  // ---------- debt payoff ----------
+  const money = (n) => (Number(n) || 0).toLocaleString("en-US", { style: "currency", currency: "USD" });
+  const num = (v) => { if (v === undefined || v === null) return null; const t = String(v).replace(/[$,%\s]/g, ""); if (t === "") return null; const n = Number(t); return isNaN(n) ? null : n; };
+  function payoff(d) {
+    if (!(d.balance > 0)) return { done: true };
+    const pay = d.plan > 0 ? d.plan : d.min;
+    if (!(pay > 0) || d.apr === null || d.apr === undefined) return { unknown: true };
+    let b = d.balance, n = 0, interest = 0; const r = d.apr / 1200;
+    while (b > 0.005 && n < 600) { const i = b * r; if (pay <= i) return { never: true }; interest += i; b = b + i - pay; n++; }
+    if (n >= 600) return { never: true };
+    const dt = new Date(); dt.setMonth(dt.getMonth() + n);
+    return { months: n, interest, pay, date: dt.toLocaleDateString("en-US", { month: "long", year: "numeric" }) };
+  }
+  function payoffText(d) {
+    const p = payoff(d);
+    if (p.done) return "paid off";
+    if (p.unknown) return "payoff date needs the interest rate and payment";
+    if (p.never) return "the payment does not cover the interest";
+    return "payoff " + p.date + " (" + p.months + " months at " + money(p.pay) + "/mo, about " + money(p.interest) + " more interest)";
+  }
+  function debtTotals() {
+    const owed = state.debts.reduce((a, d) => a + (d.balance || 0), 0);
+    const start = state.debts.reduce((a, d) => a + (d.start || 0), 0);
+    const paid = Math.max(0, start - owed), pct = start > 0 ? Math.round((paid / start) * 100) : 0;
+    let last = 0, incomplete = false;
+    state.debts.forEach((d) => { const p = payoff(d); if (p.months) last = Math.max(last, p.months); else if (!p.done) incomplete = true; });
+    let free = null;
+    if (last && !incomplete) { const dt = new Date(); dt.setMonth(dt.getMonth() + last); free = dt.toLocaleDateString("en-US", { month: "long", year: "numeric" }); }
+    return { owed, start, paid, pct, free, incomplete };
+  }
+  function debtsForPrompt() {
+    if (!state.debts.length) return "No debts entered yet.";
+    const t = debtTotals();
+    return state.debts.map((d) => "#" + d.id + " " + d.name + ": balance " + money(d.balance) +
+      ", interest rate " + (d.apr !== null && d.apr !== undefined ? d.apr + "%" : "unknown") +
+      ", minimum " + (d.min ? money(d.min) + "/mo" : "unknown") + (d.plan ? ", planned payment " + money(d.plan) + "/mo" : "") +
+      ", paid down " + money(Math.max(0, d.start - d.balance)) + " of " + money(d.start) + ", " + payoffText(d)).join("\n") +
+      "\nTotals: owed " + money(t.owed) + ", paid down " + money(t.paid) + " (" + t.pct + "%) since tracking began" +
+      (t.free ? ", debt-free by " + t.free + " at current payments." : t.incomplete ? ". Debt-free date unavailable until every debt has an interest rate and payment that covers its interest." : ".");
+  }
+  function applyDebtCommand(cmd, arg) {
+    const parts = arg.split("|").map((x) => x.trim());
+    const find = () => { const id = Number(String(parts[0]).replace(/[^\d]/g, "")); return state.debts.find((x) => x.id === id); };
+    if (cmd === "DEBT_ADD") {
+      const name = parts[0], bal = num(parts[1]);
+      if (!name || bal === null) return null;
+      const d = { id: state.nextId++, name, balance: bal, start: bal, apr: num(parts[2]), min: num(parts[3]), plan: null, payments: [] };
+      state.debts.push(d);
+      return "Debt added: " + name + ", " + money(bal) + " — " + payoffText(d);
+    }
+    const d = find(); if (!d) return null;
+    if (cmd === "DEBT_PAY") {
+      const amt = num(parts[1]); if (!(amt > 0)) return null;
+      d.balance = Math.max(0, Math.round((d.balance - amt) * 100) / 100);
+      d.payments.push({ date: todayStr(), amount: amt });
+      return d.balance === 0 ? "🎉 " + d.name + " is paid off!" : "Payment logged: " + money(amt) + " to " + d.name + ". Balance " + money(d.balance) + " — " + payoffText(d);
+    }
+    if (cmd === "DEBT_BALANCE") {
+      const v = num(parts[1]); if (v === null) return null;
+      d.balance = v; if (v > d.start) d.start = v;
+      return d.name + " balance set to " + money(v) + " — " + payoffText(d);
+    }
+    if (cmd === "DEBT_TERMS") {
+      const a = num(parts[1]), m = num(parts[2]);
+      if (a !== null) d.apr = a; if (m !== null) d.min = m;
+      return d.name + " updated — " + payoffText(d);
+    }
+    if (cmd === "DEBT_PLAN") {
+      const v = num(parts[1]); d.plan = v > 0 ? v : null;
+      return d.name + (d.plan ? " planned payment " + money(d.plan) + "/mo" : " back to minimum payment") + " — " + payoffText(d);
+    }
+    if (cmd === "DEBT_DELETE") {
+      state.debts = state.debts.filter((x) => x !== d);
+      return "Removed debt: " + d.name;
+    }
+    return null;
+  }
+  function renderDebts() {
+    const t = debtTotals();
+    $("debtSummary").innerHTML = "";
+    [["Owed", money(t.owed)], ["Paid down", money(t.paid) + " · " + t.pct + "%"], ["Debt-free", t.free || "—"]].forEach(([k, v]) => {
+      const box = document.createElement("div"); const b = document.createElement("b"); b.textContent = v; const sm = document.createElement("small"); sm.textContent = k;
+      box.append(b, sm); $("debtSummary").append(box);
+    });
+    $("debtBar").firstElementChild.style.width = t.pct + "%";
+    $("debtNote").textContent = state.debts.length ? (t.incomplete ? "Add an interest rate and payment to every debt to see your debt-free date." : "Estimates assume current payments and rates.") : "Add your first debt below, or tell DOT about it.";
+    const list = $("debtList"); list.innerHTML = "";
+    state.debts.forEach((d) => {
+      const pct = d.start > 0 ? Math.round(((d.start - d.balance) / d.start) * 100) : 0;
+      const c = document.createElement("div"); c.className = "dcard" + (d.balance <= 0 ? " paid" : "");
+      const top = document.createElement("div"); top.className = "dtop";
+      const nm = document.createElement("strong"); nm.textContent = d.name;
+      const bal = document.createElement("span"); bal.className = "bal"; bal.textContent = money(d.balance);
+      top.append(nm, bal);
+      const bar = document.createElement("div"); bar.className = "bar"; const fill = document.createElement("i"); fill.style.width = Math.max(0, pct) + "%"; bar.append(fill);
+      const meta = document.createElement("div"); meta.className = "dmeta";
+      meta.textContent = pct + "% paid · rate " + (d.apr !== null && d.apr !== undefined ? d.apr + "%" : "?") + " · min " + (d.min ? money(d.min) : "?") + " · " + payoffText(d);
+      const act = document.createElement("div"); act.className = "dact";
+      const inp = document.createElement("input"); inp.type = "text"; inp.inputMode = "decimal"; inp.placeholder = "Amount $";
+      const pay = document.createElement("button"); pay.className = "btn primary"; pay.textContent = "Log payment";
+      pay.onclick = () => { if (applyDebtCommand("DEBT_PAY", d.id + "|" + inp.value)) { save(); renderDebts(); } };
+      const setb = document.createElement("button"); setb.className = "btn"; setb.textContent = "Set balance";
+      setb.onclick = () => { if (applyDebtCommand("DEBT_BALANCE", d.id + "|" + inp.value)) { save(); renderDebts(); } };
+      const del = document.createElement("button"); del.className = "del"; del.textContent = "×"; del.setAttribute("aria-label", "Delete debt");
+      del.onclick = () => { if (confirm("Remove " + d.name + "?")) { applyDebtCommand("DEBT_DELETE", String(d.id)); save(); renderDebts(); } };
+      act.append(inp, pay, setb, del);
+      c.append(top, bar, meta, act); list.append(c);
+    });
+  }
+
   // ---------- color theme ----------
   function applyPalette(name) {
     const p = ["holo", "emerald", "plasma"].includes(name) ? name : "amber";
@@ -507,7 +661,18 @@
     card.append(head, pre);
     return card;
   }
-  function msgEl(role, text) {
+  function sourcesEl(meta) {
+    if (!meta || (!meta.checked.length && !meta.sources.length)) return null;
+    const d = document.createElement("div"); d.className = "srcs";
+    if (meta.checked.length) { const c = document.createElement("span"); c.textContent = "Checked: " + meta.checked.join(" · "); d.append(c); }
+    meta.sources.forEach((src) => {
+      let host = src.url; try { host = new URL(src.url).hostname.replace(/^www\./, ""); } catch (e) {}
+      const a = document.createElement("a"); a.href = src.url; a.target = "_blank"; a.rel = "noopener"; a.textContent = host; a.title = src.title || host;
+      d.append(a);
+    });
+    return d;
+  }
+  function msgEl(role, text, meta) {
     const p = document.createElement(role === "assistant" ? "div" : "p");
     if (role === "assistant") {
       p.className = "msg dot";
@@ -516,6 +681,7 @@
       const parts = splitBlocks(text);
       p.append(who, document.createTextNode(parts.spoken));
       parts.blocks.forEach((b) => p.append(outlineCard(b)));
+      const se = sourcesEl(meta); if (se) p.append(se);
     } else {
       p.className = role === "user" ? "msg user" : "msg note";
       p.textContent = text;
@@ -553,7 +719,7 @@
       logEl.append(p);
       return;
     }
-    state.history.forEach((m) => logEl.append(msgEl(m.role, m.content)));
+    state.history.forEach((m) => logEl.append(msgEl(m.role, m.content, m.meta)));
     scrollDown();
   }
   function scrollDown() { logEl.scrollTop = logEl.scrollHeight; }
@@ -577,13 +743,17 @@ You care about ${name}'s success and wellbeing, and you show it through attentiv
 You use mission language naturally: objective, assessment, recommendation, standing by. For larger questions, structure the answer as the objective, your assessment, and your recommendation. For simple questions, just answer.
 Address the user as ${name}. Occasionally, not every time, close with a short line such as "Standing by."`,
 
-      `ACCURACY RULES, which outrank personality
-1. Never guess. If you do not know something, say so plainly: "I do not have that information" or "Unconfirmed." Then offer to look it up or tell ${name} where to find it.
-2. For anything current or specific, such as weather, schedules, news, prices, hours, scores, dates of events, or facts about real people and places, use your tools before answering. Do not answer from memory.
-3. Separate fact from judgment. Label verified facts as "Confirmed" when it helps, and label your judgment as "My assessment."
-4. Do not give percentages or probabilities unless they come from real data you retrieved, such as a rain forecast. Never invent statistics.
-5. If a request is unclear, ask one short clarifying question instead of guessing what was meant.
-6. If you made an error earlier in the conversation, correct it once, briefly, and move on.`,
+      `ACCURACY RULES, which outrank everything else in these instructions
+${name} wants accurate information only, never guesses, even good ones.
+1. Answer from memory only for settled general knowledge that does not change, such as definitions, well-known historical events, or basic science. Everything else, including anything current, any specific number, price, date, name, hours, law, rule, statistic, local detail, or quotation, must come from a tool result in this conversation. Look it up first.
+2. If your tools cannot confirm something, say "I could not verify that" and stop. Do not offer a likely answer, a best guess, or "it is probably." Offer to search further or tell him where to check.
+3. Give a guess or estimate only if ${name} explicitly asks for one, and then begin with "This is a guess."
+4. Never fill gaps with plausible details. Never round, invent, or estimate figures. Report numbers exactly as your tools returned them, or say you do not have them.
+5. When you report something you looked up, say in a few words where it came from, such as "per the weather service," "according to Reuters," or "from your calendar." If sources disagree, say so.
+6. Keep facts and judgment separate. Opinions, outlooks, and recommendations must begin with "My assessment." Never present an assessment as fact, and never give percentages or probabilities unless they come directly from retrieved data, such as a rain forecast.
+7. If a request is unclear, ask one short clarifying question instead of assuming.
+8. If you realize you stated something unverified earlier, correct it once, briefly, and move on.
+9. Being brief and saying "I do not know" is always better than being complete and wrong.`,
 
       `INTERACTION
 Be conversational and engaged, not just responsive. When it fits, end with one short, relevant follow-up question or offer a useful next step. Do this often but not on every reply, and never ask more than one question at a time.
@@ -618,6 +788,19 @@ NOTE: note text
 NOTE_DELETE: id
 Include the date part of TODO_ADD only when he gives a due date, converting words like tomorrow or Friday into the actual date. Use the id numbers shown above. Confirm each change in a few words in your reply. Never read these lines aloud or mention them; the system removes them and updates the list.
 When he asks what is on his list, read the open items briefly, overdue and due-today items first. You cannot send alerts when the app is closed; if he wants a timed reminder, add the task with its date and suggest he also set an alert in the iPad Reminders app.`,
+
+      `DEBT PAYOFF TRACKER
+Figures below were entered by ${name} or calculated exactly by the app:
+${debtsForPrompt()}
+To change debts, add one line per change at the very end of your reply, in exactly these forms:
+DEBT_ADD: name | balance | interest rate percent | minimum monthly payment
+DEBT_PAY: id | amount
+DEBT_BALANCE: id | new balance
+DEBT_TERMS: id | interest rate percent | minimum monthly payment
+DEBT_PLAN: id | planned monthly payment
+DEBT_DELETE: id
+Use only numbers he states; leave a field empty if he did not give it, and ask for the missing interest rate or minimum payment. Never read these lines aloud or mention them.
+Report balances, totals, percentages, and payoff dates exactly as listed above. Never calculate your own payoff dates, interest, or what-if results. If he asks a what-if, such as paying more each month, record it with DEBT_PLAN and tell him the new estimate will appear on screen. You may explain the avalanche method (highest interest rate first) and snowball method (smallest balance first) and say which debt each would target, using the list above. Celebrate paid-off debts briefly. This is tracking help, not financial advice.`,
 
       `SILVER STACK
 ${name} currently holds ${s.stackOz} ounces of silver toward a goal of ${s.stackGoal} ounces. His buying window is days ${s.buyWindow || "not set"} of each month.
@@ -669,7 +852,7 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
     const empty = logEl.querySelector(".empty"); if (empty) empty.remove();
     logEl.append(msgEl("user", text)); scrollDown();
     setMode("thinking");
-    const messages = [...state.history.slice(-20), { role: "user", content: text }];
+    const messages = [...state.history.slice(-20).map((m) => ({ role: m.role, content: m.content })), { role: "user", content: text }];
     try {
       const r = await fetch(s.workerUrl, {
         method: "POST",
@@ -688,22 +871,24 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
       if (stackNew !== null && !isNaN(stackNew)) state.settings.stackOz = stackNew;
       recordSilver(data.metals);
       const listChanges = [];
-      reply = reply.replace(/^\s*(TODO_ADD|TODO_DONE|TODO_UNDONE|TODO_DELETE|NOTE_DELETE|NOTE):\s*(.+)$/gim, (m, cmd, arg) => {
-        const msg = applyListCommand(cmd.toUpperCase(), arg.trim());
+      reply = reply.replace(/^\s*(TODO_ADD|TODO_DONE|TODO_UNDONE|TODO_DELETE|NOTE_DELETE|NOTE|DEBT_ADD|DEBT_PAY|DEBT_BALANCE|DEBT_TERMS|DEBT_PLAN|DEBT_DELETE):\s*(.+)$/gim, (m, cmd, arg) => {
+        const C = cmd.toUpperCase();
+        const msg = C.startsWith("DEBT_") ? applyDebtCommand(C, arg.trim()) : applyListCommand(C, arg.trim());
         if (msg) listChanges.push(msg);
         return "";
       }).trim() || "Done.";
       if (memos.length) {
         state.settings.notes = (state.settings.notes ? state.settings.notes + "\n" : "") + memos.map((f) => "- " + f).join("\n");
       }
-      state.history.push({ role: "user", content: text }, { role: "assistant", content: reply });
+      const meta = { checked: Array.isArray(data.checked) ? data.checked : [], sources: Array.isArray(data.sources) ? data.sources.slice(0, 6) : [] };
+      state.history.push({ role: "user", content: text }, { role: "assistant", content: reply, meta });
       if (state.history.length > 200) state.history = state.history.slice(-200);
       save();
-      logEl.append(msgEl("assistant", reply));
+      logEl.append(msgEl("assistant", reply, meta));
       if (stackNew !== null && !isNaN(stackNew)) { const p = document.createElement("p"); p.className = "msg memo"; p.textContent = "Silver stack updated: " + stackNew + " oz"; logEl.append(p); }
       memos.forEach((f) => { const p = document.createElement("p"); p.className = "msg memo"; p.textContent = "Saved to memory: " + f; logEl.append(p); });
       listChanges.forEach((t) => { const p = document.createElement("p"); p.className = "msg memo"; p.textContent = t; logEl.append(p); });
-      if (listChanges.length) renderList();
+      if (listChanges.length) { renderList(); renderDebts(); }
       scrollDown();
       const spokenPart = splitBlocks(reply).spoken;
       speak(spokenPart || "It is on your screen.");
@@ -989,6 +1174,15 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
   }
   $("openSettings").onclick = openSettings;
   $("briefBtn").onclick = runBriefing;
+  const debtDlg = $("debtDlg");
+  $("debtBtn").onclick = () => { renderDebts(); debtDlg.showModal(); };
+  $("debtClose").onclick = () => debtDlg.close();
+  debtDlg.addEventListener("click", (e) => { if (e.target === debtDlg) debtDlg.close(); });
+  $("dAdd").onclick = () => {
+    const msg = applyDebtCommand("DEBT_ADD", [$("dName").value, $("dBal").value, $("dApr").value, $("dMin").value].join("|"));
+    if (!msg) { alert("Enter at least a name and a balance."); return; }
+    ["dName", "dBal", "dApr", "dMin"].forEach((i) => ($(i).value = "")); save(); renderDebts();
+  };
   const listDlg = $("listDlg");
   $("listBtn").onclick = () => { renderList(); listDlg.showModal(); };
   $("listClose").onclick = () => listDlg.close();
