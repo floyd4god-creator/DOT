@@ -166,6 +166,8 @@
   .msg.user { align-self: flex-end; text-align: right; color: var(--muted); }
   .msg.note { color: var(--alert); font-size: .95rem; }
   .msg.memo { color: var(--amber); font-size: .9rem; opacity: .85; }
+  .replay { margin-top: 6px; background: transparent; border: 1px solid var(--line); color: var(--amber); border-radius: 14px; padding: 3px 12px; font-size: .8rem; cursor: pointer; }
+  .replay:hover { border-color: var(--amber); }
   .srcs { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 6px; font-size: .78rem; color: var(--muted); }
   .srcs a { color: var(--amber); text-decoration: none; border-bottom: 1px dotted currentColor; }
   .outline { margin-top: 10px; border: 1px solid color-mix(in srgb, var(--amber) 40%, var(--line)); border-radius: 10px; background: color-mix(in srgb, var(--panel) 85%, transparent); overflow: hidden; }
@@ -688,6 +690,11 @@
       p.append(who, document.createTextNode(parts.spoken));
       parts.blocks.forEach((b) => p.append(outlineCard(b)));
       const se = sourcesEl(meta); if (se) p.append(se);
+      if (parts.spoken.trim()) {
+        const rb = document.createElement("button"); rb.className = "replay"; rb.textContent = "▶ Hear again";
+        rb.onclick = () => { unlockSpeech(); pendingAudio = null; voiceStatus(""); speak(parts.spoken, { autoSpeak: true }); };
+        p.append(rb);
+      }
     } else {
       p.className = role === "user" ? "msg user" : "msg note";
       p.textContent = text;
@@ -958,20 +965,34 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
   }
   if (synth) { loadVoices(); synth.onvoiceschanged = loadVoices; }
 
+  // Let DOT's voice play even when the iPad is in Silent mode (Safari 17 and later).
+  try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
+  // Backup player: one <audio> element, unlocked on the first tap, which iPad lets play later replies.
+  const voiceEl = new Audio(); voiceEl.setAttribute("playsinline", ""); voiceEl.preload = "auto";
+  const SILENT = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+  let elUnlocked = false;
+  function unlockEl() {
+    if (elUnlocked || !voiceEl.paused) return;
+    try { voiceEl.src = SILENT; const p = voiceEl.play(); if (p) p.then(() => { voiceEl.pause(); elUnlocked = true; }).catch(() => {}); } catch (e) {}
+  }
   function unlockSpeech() {
-    unlockAudio();
+    unlockAudio(); unlockEl();
     if (unlocked || !synth) return;
     const u = new SpeechSynthesisUtterance(" ");
     u.volume = 0; synth.speak(u); unlocked = true;
   }
-  // Cloud voice through the Worker, played with Web Audio
-  let actx = null, current = null, audioUnlocked = false, cloudWarned = false;
+  let actx = null, current = null, audioUnlocked = false, cloudWarned = false, statusTimer = 0;
+  function voiceStatus(msg, persist) {
+    clearTimeout(statusTimer);
+    liveEl.textContent = msg || "";
+    if (msg && !persist) statusTimer = setTimeout(() => { if (liveEl.textContent === msg) liveEl.textContent = ""; }, 9000);
+  }
   function audioCtx() {
     if (!actx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) actx = new AC(); }
     return actx;
   }
-  // Wake the audio system. iPad pauses it ("suspended" or "interrupted") after backgrounding
-  // or when another app uses the speaker; it can only be restarted from a tap or key press.
+  // Wake the audio system. iPad pauses it after backgrounding or when another app uses the speaker,
+  // and only lets a page restart it from a tap or key press.
   function unlockAudio() {
     let c = audioCtx();
     if (!c) return;
@@ -985,21 +1006,22 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
   }
   let pendingAudio = null;
   function gestureWake() {
-    unlockAudio();
+    unlockAudio(); unlockEl();
     if (pendingAudio) {
-      const p = pendingAudio; pendingAudio = null; liveEl.textContent = "";
-      setTimeout(() => playBuffer(p.audio, p.s), 60);
+      const p = pendingAudio; pendingAudio = null; voiceStatus("");
+      setTimeout(() => playVoice(p.bytes, p.s), 60);
     }
   }
   ["pointerdown", "touchend", "keydown"].forEach((ev) => document.addEventListener(ev, gestureWake, true));
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) return;
-    if (synth) synth.cancel();
+    if (synth) { synth.cancel(); if (synth.paused) synth.resume(); }
     if (actx && actx.state !== "running") actx.resume().catch(() => {});
   });
   function stopAudio() {
     stopVU();
     if (current) { try { current.stop(); } catch (e) {} current = null; }
+    try { if (!voiceEl.paused) voiceEl.pause(); } catch (e) {}
     if (synth) synth.cancel();
   }
   function chain(c, src, fx) {
@@ -1099,10 +1121,10 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
   })();
   function startVU(a) { orb.setAnalyser(a); }
   function stopVU() { orb.setAnalyser(null); }
-  async function speakCloud(text, s) {
-    const c = audioCtx();
-    if (!c) throw new Error("audio playback is not supported here");
-    if (!s.workerUrl) throw new Error("no Worker address");
+  const ttsCache = new Map();
+  async function fetchVoice(text, s) {
+    const key = text + "|" + (Number(s.rate) || 1);
+    if (ttsCache.has(key)) return ttsCache.get(key);
     const r = await fetch(s.workerUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Access-Code": s.accessCode || "" },
@@ -1114,34 +1136,58 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
       throw new Error(d.error || "voice error " + r.status);
     }
     const buf = await r.arrayBuffer();
-    const audio = await new Promise((res, rej) => c.decodeAudioData(buf, res, rej));
-    await playBuffer(audio, s);
+    if (!buf || buf.byteLength < 100) throw new Error("the voice service sent back no audio");
+    ttsCache.set(key, buf);
+    if (ttsCache.size > 12) ttsCache.delete(ttsCache.keys().next().value);
+    return buf;
   }
-  async function playBuffer(audio, s) {
+  async function speakCloud(text, s) {
+    if (!s.workerUrl) throw new Error("no Worker address");
+    const bytes = await fetchVoice(text, s);
+    await playVoice(bytes, s);
+  }
+  // Try the main player (with the live orb); if the iPad has it paused, use the backup player;
+  // if both are blocked, hold the reply until the next tap.
+  async function playVoice(bytes, s) {
     const c = audioCtx();
-    if (c.state !== "running") { try { await c.resume(); } catch (e) {} }
-    if (c.state !== "running") {
-      // Audio is paused by the iPad: hold her reply and play it on the next tap.
-      pendingAudio = { audio, s };
-      setMode("idle");
-      liveEl.textContent = "Voice paused by the iPad. Tap anywhere to hear her.";
-      return;
+    if (c && c.state !== "running") { try { await c.resume(); } catch (e) {} }
+    if (c && c.state === "running") {
+      try {
+        const audio = await new Promise((res, rej) => c.decodeAudioData(bytes.slice(0), res, rej));
+        const src = c.createBufferSource();
+        src.buffer = audio;
+        const an = chain(c, src, s.fx);
+        src.onended = () => { if (current === src) { current = null; stopVU(); doneSpeaking(); } };
+        current = src;
+        setMode("speaking");
+        src.start(0);
+        startVU(an);
+        voiceStatus("");
+        return;
+      } catch (e) { /* fall through to the backup player */ }
     }
-    const src = c.createBufferSource();
-    src.buffer = audio;
-    const an = chain(c, src, s.fx);
-    src.onended = () => { if (current === src) { current = null; stopVU(); doneSpeaking(); } };
-    current = src;
-    setMode("speaking");
-    src.start(0);
-    startVU(an);
+    try {
+      const url = URL.createObjectURL(new Blob([bytes], { type: "audio/mpeg" }));
+      voiceEl.onended = () => { URL.revokeObjectURL(url); doneSpeaking(); };
+      voiceEl.onerror = () => { URL.revokeObjectURL(url); doneSpeaking(); };
+      voiceEl.src = url;
+      await voiceEl.play();
+      elUnlocked = true;
+      setMode("speaking");
+      voiceStatus("");
+    } catch (e) {
+      pendingAudio = { bytes, s };
+      setMode("idle");
+      voiceStatus("Voice paused by the iPad. Tap anywhere, or tap Hear again on her reply.", true);
+    }
   }
   function speak(text, opts) {
     const s = { ...state.settings, ...(opts || {}) };
-    if (!s.autoSpeak) { setMode("idle"); return; }
+    if (!s.autoSpeak || !String(text || "").trim()) { setMode("idle"); return; }
     stopAudio();
     if (s.engine === "cloud") {
       speakCloud(text, s).catch((e) => {
+        voiceStatus("Cloud voice failed (" + e.message + "). Using the iPad voice.");
         if (!cloudWarned) { note("Cloud voice unavailable (" + e.message + "). Using the iPad voice."); cloudWarned = true; }
         speakDevice(text, s);
       });
@@ -1150,16 +1196,20 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
     speakDevice(text, s);
   }
   function speakDevice(text, s) {
-    if (!synth) { setMode("idle"); return; }
+    if (!synth) { setMode("idle"); voiceStatus("This browser has no built-in voice."); return; }
     synth.cancel();
+    if (synth.paused) synth.resume();
     const u = new SpeechSynthesisUtterance(text);
+    window.__dotUtterance = u; // keeps the iPad from discarding it mid-sentence
     const v = voices.find((x) => x.voiceURI === s.voiceURI);
     if (v) { u.voice = v; u.lang = v.lang; }
     u.rate = Number(s.rate) || 1;
     u.pitch = Number(s.pitch) || 1;
-    u.onstart = () => setMode("speaking");
+    let started = false;
+    u.onstart = () => { started = true; setMode("speaking"); };
     u.onend = u.onerror = () => doneSpeaking();
     synth.speak(u);
+    setTimeout(() => { if (!started && !synth.speaking) voiceStatus("The voice did not start. Tap Hear again on her reply."); }, 3500);
   }
 
   // ---------- voice in ----------
