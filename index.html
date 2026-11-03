@@ -28,6 +28,7 @@
     --bright: #ffd27a;
     --hot: #fff6e0;
     --deep: #9a5a18;
+    --accent2: #ff5e3a;
     --alert: #d8705a;
     --display: "Chakra Petch", "Avenir Next Condensed", system-ui, sans-serif;
     --body: "IBM Plex Sans", -apple-system, system-ui, sans-serif;
@@ -36,9 +37,9 @@
     padding-bottom: env(safe-area-inset-bottom, 0px);
     background: var(--bg);
   }
-  :root[data-palette="holo"] { --amber: #2fd4ff; --amber-dim: #1d6c8c; --bright: #9af2ff; --hot: #effdff; --deep: #0b4f86; --bg: #050b16; --panel: #0c1727; --line: #18304a; --text: #dcebf5; --muted: #7f97ab; }
-  :root[data-palette="emerald"] { --amber: #2ef2a0; --amber-dim: #17775a; --bright: #a8ffd8; --hot: #f0fff9; --deep: #0a6045; --bg: #040e0d; --panel: #0a1b19; --line: #163631; --text: #dcf2ea; --muted: #7fa298; }
-  :root[data-palette="plasma"] { --amber: #9f8bff; --amber-dim: #4f45a0; --bright: #d6caff; --hot: #f7f4ff; --deep: #3b2d9e; --bg: #08071a; --panel: #14122c; --line: #27224a; --text: #e4e1f5; --muted: #9690b3; }
+  :root[data-palette="holo"] { --amber: #2fd4ff; --amber-dim: #1d6c8c; --bright: #9af2ff; --hot: #effdff; --deep: #0b4f86; --accent2: #ff4fd8; --bg: #050b16; --panel: #0c1727; --line: #18304a; --text: #dcebf5; --muted: #7f97ab; }
+  :root[data-palette="emerald"] { --amber: #2ef2a0; --amber-dim: #17775a; --bright: #a8ffd8; --hot: #f0fff9; --deep: #0a6045; --accent2: #c6ff4a; --bg: #040e0d; --panel: #0a1b19; --line: #163631; --text: #dcf2ea; --muted: #7fa298; }
+  :root[data-palette="plasma"] { --amber: #9f8bff; --amber-dim: #4f45a0; --bright: #d6caff; --hot: #f7f4ff; --deep: #3b2d9e; --accent2: #ff6ec7; --bg: #08071a; --panel: #14122c; --line: #27224a; --text: #e4e1f5; --muted: #9690b3; }
   *, *::before, *::after { box-sizing: inherit; }
   html, body { height: 100%; }
   body {
@@ -51,7 +52,8 @@
     padding: 0 max(18px, env(safe-area-inset-right, 0px)) 0 max(18px, env(safe-area-inset-left, 0px));
     -webkit-tap-highlight-color: transparent;
     background:
-      radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--amber) 16%, transparent), transparent 55%),
+      radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--amber) 18%, transparent), transparent 55%),
+      radial-gradient(circle at 85% 8%, color-mix(in srgb, var(--accent2) 10%, transparent), transparent 40%),
       radial-gradient(ellipse at 50% 120%, color-mix(in srgb, var(--deep) 30%, transparent), transparent 60%),
       var(--bg);
   }
@@ -66,7 +68,8 @@
   }
   @media (min-width: 900px) {
     body { background:
-      radial-gradient(circle at 26% 50%, color-mix(in srgb, var(--amber) 16%, transparent), transparent 50%),
+      radial-gradient(circle at 26% 50%, color-mix(in srgb, var(--amber) 18%, transparent), transparent 50%),
+      radial-gradient(circle at 92% 6%, color-mix(in srgb, var(--accent2) 10%, transparent), transparent 40%),
       radial-gradient(ellipse at 60% 120%, color-mix(in srgb, var(--deep) 30%, transparent), transparent 60%),
       var(--bg); }
     body::before {
@@ -130,24 +133,28 @@
   }
 
   .core { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 4px 0 10px; }
-  .orb { width: min(64vw, 330px); aspect-ratio: 1; display: block; overflow: visible; }
-  @media (min-width: 900px) { .orb { width: min(38vw, 430px); } }
-  @media (max-height: 560px) { .orb { width: 150px; } }
+  .orb-wrap { position: relative; width: min(64vw, 330px); aspect-ratio: 1; }
+  @media (min-width: 900px) { .orb-wrap { width: min(38vw, 430px); } }
+  .orb { width: 100%; height: 100%; display: block; overflow: visible; }
+  .orb-fx { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .hud text { font: 600 5.5px var(--display); fill: var(--amber); opacity: .75; letter-spacing: .14em; }
+  @media (max-height: 560px) { .orb-wrap { width: 150px; } }
   .status { font: 500 1.15rem/1.2 var(--display); letter-spacing: 0.04em; color: var(--text); margin: 4px 0 0; }
   .live { min-height: 1.6em; color: var(--muted); font-style: italic; text-align: center; max-width: 34ch; margin: 0; }
 
   /* Orb parts (animated by script) */
   .orb .halo { opacity: .85; }
+  .s-a { stop-color: var(--accent2); }
   .s-c { stop-color: var(--amber); } .s-b { stop-color: var(--bright); } .s-h { stop-color: var(--hot); } .s-d { stop-color: var(--deep); }
   .seg-outer { fill: none; stroke: color-mix(in srgb, var(--amber) 55%, var(--amber-dim)); stroke-width: 2.4; stroke-dasharray: 26 6.81; transition: stroke .4s; }
   .ring-ticks { fill: none; stroke: var(--amber); stroke-width: 2.4; stroke-dasharray: .9 6.69; opacity: .55; }
   .ring-dash { fill: none; stroke: var(--amber); stroke-width: .8; stroke-dasharray: 2 4; opacity: .45; }
   .ring-arc { fill: none; stroke: var(--amber); stroke-width: 2.6; stroke-dasharray: 80 360; stroke-linecap: round; opacity: .9; }
-  .ring-arc2 { fill: none; stroke: var(--bright); stroke-width: 1.4; stroke-dasharray: 46 394; stroke-linecap: round; opacity: .6; }
+  .ring-arc2 { fill: none; stroke: var(--accent2); stroke-width: 1.4; stroke-dasharray: 46 394; stroke-linecap: round; opacity: .6; }
   .ring-inner { fill: none; stroke: var(--amber-dim); stroke-width: 1; }
   .marks path { fill: var(--amber); opacity: .8; }
-  .bars line { stroke: var(--amber); stroke-width: 2.2; stroke-linecap: round; }
-  .sat { fill: var(--bright); }
+  .bars line { stroke: url(#barGrad); stroke-width: 2.2; stroke-linecap: round; }
+  .sat { fill: var(--accent2); }
   .glow { fill: url(#glow); }
   .dot-hot { fill: var(--hot); }
   body[data-mode="listening"] .seg-outer { stroke: var(--amber); }
@@ -244,6 +251,7 @@
 
   <main>
     <section class="core">
+      <div class="orb-wrap">
       <svg class="orb" viewBox="0 0 200 200" aria-hidden="true">
         <defs>
           <radialGradient id="halo">
@@ -266,8 +274,12 @@
             <stop offset="0%" class="s-c" stop-opacity="0"/>
             <stop offset="100%" class="s-c" stop-opacity=".4"/>
           </linearGradient>
+          <radialGradient id="barGrad" gradientUnits="userSpaceOnUse" cx="100" cy="100" r="68">
+            <stop offset="55%" class="s-c"/>
+            <stop offset="100%" class="s-a"/>
+          </radialGradient>
           <filter id="neon" x="-30%" y="-30%" width="160%" height="160%">
-            <feGaussianBlur stdDeviation="1.8" result="b"/>
+            <feGaussianBlur stdDeviation="2.4" result="b"/>
             <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
           </filter>
         </defs>
@@ -286,11 +298,18 @@
         <circle class="ring-inner" cx="100" cy="100" r="34"/>
         <g id="gOrbit"><circle class="sat" cx="100" cy="66" r="1.9"/><circle class="sat" cx="134" cy="100" r="1.3"/><circle class="sat" cx="76" cy="124" r="1"/></g>
         <g id="gCore" filter="url(#neon)">
-          <circle cx="100" cy="100" r="22" fill="url(#coreGrad)"/>
-          <circle class="dot-hot" cx="100" cy="100" r="7.5"/>
-          <ellipse cx="92" cy="91" rx="6" ry="3.4" fill="#fff" opacity=".35" transform="rotate(-30 92 91)"/>
+          <circle cx="100" cy="100" r="12" fill="url(#coreGrad)"/>
+          <circle class="dot-hot" cx="100" cy="100" r="5"/>
+        </g>
+        <g class="hud">
+          <text id="hudTL" x="4" y="10">DOT-01</text>
+          <text id="hudTR" x="196" y="10" text-anchor="end">STANDBY</text>
+          <text id="hudBL" x="4" y="196">SIG ▮▯▯▯</text>
+          <text id="hudBR" x="196" y="196" text-anchor="end">0x3F2A</text>
         </g>
       </svg>
+      <canvas class="orb-fx" aria-hidden="true"></canvas>
+      </div>
       <p class="status" id="status" aria-live="polite">Standing by</p>
       <p class="live" id="live"></p>
     </section>
@@ -706,6 +725,7 @@
     const p = ["holo", "emerald", "plasma"].includes(name) ? name : "amber";
     if (p === "amber") document.documentElement.removeAttribute("data-palette");
     else document.documentElement.setAttribute("data-palette", p);
+    try { if (typeof orb !== "undefined") orb.refreshColors(); } catch (e) {}
     const m = document.querySelector('meta[name="theme-color"]');
     if (m) m.setAttribute("content", getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() || "#151b22");
   }
@@ -1142,6 +1162,58 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
       els.bars.appendChild(l); bars.push({ l, c, s });
     }
     let an = null, freq = null, wave = null, lvl = 0, last = performance.now(), raf = 0;
+    // Canvas layer: drifting particles and a rotating holographic point-globe
+    const cvs = document.querySelector(".orb-fx"), cx = cvs ? cvs.getContext("2d") : null;
+    let C1 = [47, 212, 255], C2 = [255, 79, 216], CH = [239, 253, 255];
+    function readColors() {
+      const cs = getComputedStyle(document.documentElement);
+      const h = (v, d) => { const m = String(v || "").trim().match(/^#([0-9a-f]{6})$/i); return m ? [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16)) : d; };
+      C1 = h(cs.getPropertyValue("--amber"), C1); C2 = h(cs.getPropertyValue("--accent2"), C2); CH = h(cs.getPropertyValue("--hot"), CH);
+    }
+    const GP = [], GN = 220;
+    for (let i = 0; i < GN; i++) { const y = 1 - (i / (GN - 1)) * 2, r = Math.sqrt(1 - y * y), th = i * 2.399963; GP.push([Math.cos(th) * r, y, Math.sin(th) * r]); }
+    const PT = [];
+    for (let i = 0; i < 80; i++) PT.push({ a: Math.random() * 6.283, r: 40 + Math.random() * 56, s: (0.1 + Math.random() * 0.35) * (Math.random() < 0.5 ? -1 : 1), tw: Math.random() * 6.283, z: Math.random() });
+    let gAng = 0, hudT = 0;
+    const rgba = (c, a) => "rgba(" + c[0] + "," + c[1] + "," + c[2] + "," + Math.max(0, Math.min(1, a)).toFixed(3) + ")";
+    function drawFx(t, dt, mode) {
+      if (!cx) return;
+      const box = cvs.getBoundingClientRect(), d = Math.min(2, window.devicePixelRatio || 1), W = Math.round(box.width * d);
+      if (!W) return;
+      if (cvs.width !== W) { cvs.width = W; cvs.height = W; }
+      const k = W / 200;
+      cx.clearRect(0, 0, W, W);
+      cx.globalCompositeOperation = "lighter";
+      const spd = mode === "thinking" ? 3 : mode === "listening" ? 1.6 : 1;
+      for (const p of PT) {
+        p.a += p.s * dt * spd * (1 + lvl * 2);
+        let r = p.r + lvl * 8 * Math.sin(t * 9 + p.tw);
+        if (mode === "listening") r -= 6 * Math.sin(t * 2 + p.tw);
+        const tw = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * 3 + p.tw));
+        cx.fillStyle = rgba(p.z > 0.6 ? C2 : C1, (0.25 + lvl * 0.6) * tw);
+        cx.beginPath(); cx.arc((100 + Math.cos(p.a) * r) * k, (100 + Math.sin(p.a) * r) * k, (0.5 + p.z * 1.1) * k * (1 + lvl * 0.6), 0, 6.283); cx.fill();
+      }
+      gAng += dt * (0.5 + lvl * 3 + (mode === "thinking" ? 1.5 : 0));
+      const R = 25 + lvl * 6, ca = Math.cos(gAng), sa = Math.sin(gAng), ct = Math.cos(0.42), st = Math.sin(0.42);
+      for (const g of GP) {
+        const x = g[0] * ca - g[2] * sa, z = g[0] * sa + g[2] * ca, y2 = g[1] * ct - z * st, z2 = g[1] * st + z * ct, depth = (z2 + 1) / 2;
+        cx.fillStyle = rgba(depth > 0.55 ? CH : depth > 0.3 ? C1 : C2, (0.15 + 0.75 * depth) * (0.7 + lvl * 0.5));
+        cx.beginPath(); cx.arc((100 + x * R) * k, (100 + y2 * R) * k, (0.35 + depth * 0.9) * k, 0, 6.283); cx.fill();
+      }
+      cx.globalCompositeOperation = "source-over";
+    }
+    const HUD = { idle: "STANDBY", listening: "LISTENING", thinking: "PROCESSING", speaking: "TRANSMITTING" };
+    const hTR = document.getElementById("hudTR"), hBL = document.getElementById("hudBL"), hBR = document.getElementById("hudBR");
+    function drawHud(t, mode) {
+      if (hTR && hTR.textContent !== (HUD[mode] || "STANDBY")) hTR.textContent = HUD[mode] || "STANDBY";
+      if (t - hudT > 0.45) {
+        hudT = t;
+        if (hBR) hBR.textContent = "0x" + Math.floor(Math.random() * 65535).toString(16).toUpperCase().padStart(4, "0");
+        const n = Math.max(1, Math.min(4, 1 + Math.round(lvl * 4)));
+        if (hBL) hBL.textContent = "SIG " + "▮".repeat(n) + "▯".repeat(4 - n);
+      }
+    }
+    readColors();
     const ang = { seg: 0, sweep: 0, dash: 0, a: 0, b: 0, orbit: 0 };
     const rot = (el, a) => el.setAttribute("transform", "rotate(" + a.toFixed(2) + " 100 100)");
     const scale = (el, k) => el.setAttribute("transform", "translate(100 100) scale(" + k.toFixed(3) + ") translate(-100 -100)");
@@ -1189,6 +1261,8 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
       scale(els.core, 1 + lvl * 0.22);
       scale(els.glow, 0.9 + lvl * 0.9);
       els.glow.setAttribute("opacity", (0.35 + lvl * 0.65).toFixed(2));
+      drawFx(t, dt, mode);
+      drawHud(t, mode);
       raf = requestAnimationFrame(frame);
     }
     function start() { if (!raf && !reduceMotion) { last = performance.now(); raf = requestAnimationFrame(frame); } }
@@ -1196,7 +1270,9 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
     document.addEventListener("visibilitychange", () => (document.hidden ? stop() : start()));
     if (reduceMotion) { for (let i = 0; i < N; i++) { const b = bars[i]; b.l.setAttribute("x2", (100 + b.c * (R0 + 6)).toFixed(2)); b.l.setAttribute("y2", (100 + b.s * (R0 + 6)).toFixed(2)); b.l.setAttribute("opacity", ".5"); } }
     start();
+    if (reduceMotion) setTimeout(() => drawFx(1, 0, "idle"), 50);
     return {
+      refreshColors() { readColors(); if (reduceMotion) drawFx(1, 0, "idle"); },
       setAnalyser(a) { an = a; if (a) { freq = new Uint8Array(a.frequencyBinCount); wave = new Uint8Array(a.fftSize); } },
     };
   })();
