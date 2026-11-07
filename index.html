@@ -1123,6 +1123,7 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
     stopVU();
     if (current) { try { current.stop(); } catch (e) {} current = null; }
     try { if (!voiceEl.paused) voiceEl.pause(); } catch (e) {}
+    try { orb.setEnvelope(null, null); } catch (e) {}
     if (synth) synth.cancel();
   }
   function chain(c, src, fx) {
@@ -1161,7 +1162,7 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
       l.setAttribute("x1", (100 + c * R0).toFixed(2)); l.setAttribute("y1", (100 + s * R0).toFixed(2));
       els.bars.appendChild(l); bars.push({ l, c, s });
     }
-    let an = null, freq = null, wave = null, lvl = 0, last = performance.now(), raf = 0;
+    let an = null, freq = null, wave = null, lvl = 0, last = performance.now(), raf = 0, envObj = null, envEl = null;
     // Canvas layer: drifting particles and a rotating holographic point-globe
     const cvs = document.querySelector(".orb-fx"), cx = cvs ? cvs.getContext("2d") : null;
     let C1 = [47, 212, 255], C2 = [255, 79, 216], CH = [239, 253, 255];
@@ -1221,7 +1222,14 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
       const dt = Math.min(0.05, (now - last) / 1000); last = now;
       const t = now / 1000, mode = document.body.dataset.mode;
       let target;
-      if (mode === "speaking" && an) {
+      if (mode === "speaking" && envObj && envEl) {
+        const e = envObj.env, idx = Math.floor((envEl.currentTime || 0) / envObj.hop);
+        target = e[Math.min(e.length - 1, Math.max(0, idx))] || 0;
+        for (let i = 0; i < N; i++) {
+          const k = (i < N / 2 ? i : N - 1 - i) / (N / 2);
+          lv[i] = Math.min(1, target * (0.45 + 0.55 * Math.abs(Math.sin(t * 6.5 + i * 0.9 + k * 3))) * (0.8 + 0.5 * k));
+        }
+      } else if (mode === "speaking" && an) {
         an.getByteFrequencyData(freq); an.getByteTimeDomainData(wave);
         let sum = 0; for (let i = 0; i < wave.length; i++) { const v = (wave[i] - 128) / 128; sum += v * v; }
         target = Math.min(1, Math.sqrt(sum / wave.length) * 4.5);
@@ -1274,6 +1282,7 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
     return {
       refreshColors() { readColors(); if (reduceMotion) drawFx(1, 0, "idle"); },
       setAnalyser(a) { an = a; if (a) { freq = new Uint8Array(a.frequencyBinCount); wave = new Uint8Array(a.fftSize); } },
+      setEnvelope(e, el) { envObj = e; envEl = el; },
     };
   })();
   function startVU(a) { orb.setAnalyser(a); }
@@ -1303,14 +1312,68 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
     const bytes = await fetchVoice(text, s);
     await playVoice(bytes, s);
   }
-  // Try the main player (with the live orb); if the iPad has it paused, use the backup player;
-  // if both are blocked, hold the reply until the next tap.
+  // Playback design: the iPad's Web Audio output can silently stay attached to an old audio route
+  // (for example after the monitor, Bluetooth, or another app changes the sound output), so DOT's voice
+  // now plays through the system media player, which always follows the current speaker. The voice is
+  // prepared offline first: the speaker effect is applied and a loudness map is made for the orb.
+  const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  function decodeWith(ctx, bytes) { return new Promise((res, rej) => ctx.decodeAudioData(bytes.slice(0), res, rej)); }
+  function envelopeOf(buf) {
+    const d = buf.getChannelData(0), hop = Math.max(1, Math.floor(buf.sampleRate * 0.03)), n = Math.ceil(d.length / hop), env = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      let sum = 0; const a = i * hop, b = Math.min(d.length, a + hop);
+      for (let j = a; j < b; j++) sum += d[j] * d[j];
+      env[i] = Math.min(1, Math.sqrt(sum / Math.max(1, b - a)) * 4.5);
+    }
+    return { env, hop: hop / buf.sampleRate };
+  }
+  function wavBlob(buf) {
+    const ch = buf.getChannelData(0), rate = buf.sampleRate, len = ch.length, out = new DataView(new ArrayBuffer(44 + len * 2));
+    const w = (o, str) => { for (let i = 0; i < str.length; i++) out.setUint8(o + i, str.charCodeAt(i)); };
+    w(0, "RIFF"); out.setUint32(4, 36 + len * 2, true); w(8, "WAVE"); w(12, "fmt "); out.setUint32(16, 16, true);
+    out.setUint16(20, 1, true); out.setUint16(22, 1, true); out.setUint32(24, rate, true); out.setUint32(28, rate * 2, true);
+    out.setUint16(32, 2, true); out.setUint16(34, 16, true); w(36, "data"); out.setUint32(40, len * 2, true);
+    for (let i = 0; i < len; i++) { const v = Math.max(-1, Math.min(1, ch[i])); out.setInt16(44 + i * 2, v < 0 ? v * 0x8000 : v * 0x7fff, true); }
+    return new Blob([out], { type: "audio/wav" });
+  }
+  async function prepareVoice(bytes, fx) {
+    if (!OAC) return { blob: new Blob([bytes], { type: "audio/mpeg" }), env: null };
+    try {
+      const src = await decodeWith(new OAC(1, 1, 24000), bytes);
+      if (!fx) return { blob: new Blob([bytes], { type: "audio/mpeg" }), env: envelopeOf(src) };
+      const oc = new OAC(1, Math.ceil(src.duration * 24000) + 2400, 24000);
+      const node = oc.createBufferSource(); node.buffer = src;
+      chain(oc, node, true); node.start(0);
+      const rendered = await new Promise((res, rej) => {
+        const p = oc.startRendering();
+        if (p && p.then) p.then(res, rej); else oc.oncomplete = (e) => res(e.renderedBuffer);
+      });
+      return { blob: wavBlob(rendered), env: envelopeOf(rendered) };
+    } catch (e) {
+      return { blob: new Blob([bytes], { type: "audio/mpeg" }), env: null };
+    }
+  }
   async function playVoice(bytes, s) {
+    const prep = await prepareVoice(bytes, s.fx);
+    // 1) System media player: follows the current speaker and plays in Silent mode.
+    try {
+      const url = URL.createObjectURL(prep.blob);
+      const finish = () => { URL.revokeObjectURL(url); orb.setEnvelope(null, null); doneSpeaking(); };
+      voiceEl.onended = finish; voiceEl.onerror = finish;
+      voiceEl.src = url;
+      await voiceEl.play();
+      elUnlocked = true;
+      orb.setEnvelope(prep.env, voiceEl);
+      setMode("speaking");
+      voiceStatus("");
+      return;
+    } catch (e) { /* not allowed yet: try the Web Audio player */ }
+    // 2) Web Audio player, used only if the media player is blocked.
     const c = audioCtx();
     if (c && c.state !== "running") { try { await c.resume(); } catch (e) {} }
     if (c && c.state === "running") {
       try {
-        const audio = await new Promise((res, rej) => c.decodeAudioData(bytes.slice(0), res, rej));
+        const audio = await decodeWith(c, bytes);
         const src = c.createBufferSource();
         src.buffer = audio;
         const an = chain(c, src, s.fx);
@@ -1321,22 +1384,12 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
         startVU(an);
         voiceStatus("");
         return;
-      } catch (e) { /* fall through to the backup player */ }
+      } catch (e) {}
     }
-    try {
-      const url = URL.createObjectURL(new Blob([bytes], { type: "audio/mpeg" }));
-      voiceEl.onended = () => { URL.revokeObjectURL(url); doneSpeaking(); };
-      voiceEl.onerror = () => { URL.revokeObjectURL(url); doneSpeaking(); };
-      voiceEl.src = url;
-      await voiceEl.play();
-      elUnlocked = true;
-      setMode("speaking");
-      voiceStatus("");
-    } catch (e) {
-      pendingAudio = { bytes, s };
-      setMode("idle");
-      voiceStatus("Voice paused by the iPad. Tap anywhere, or tap Hear again on her reply.", true);
-    }
+    // 3) Both blocked: hold the reply until the next tap.
+    pendingAudio = { bytes, s };
+    setMode("idle");
+    voiceStatus("Voice paused by the iPad. Tap anywhere, or tap Hear again on her reply.", true);
   }
   function speak(text, opts) {
     const s = { ...state.settings, ...(opts || {}) };
