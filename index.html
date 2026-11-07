@@ -93,6 +93,14 @@
   }
   .icon-btn:hover { color: var(--text); border-color: var(--muted); }
   .brief-btn { width: auto; border-radius: 22px; padding: 0 14px 0 12px; gap: 6px; display: flex; align-items: center; color: var(--amber); border-color: color-mix(in srgb, var(--amber) 45%, var(--line)); font-weight: 500; }
+  .sday { display: flex; align-items: center; gap: 10px; padding: 7px 4px; border-bottom: 1px solid var(--line); font-size: .92rem; }
+  .sday .d { width: 64px; color: var(--muted); font-size: .8rem; flex: none; }
+  .sday .r { flex: 1; }
+  .sday .ok { color: #3fd88a; }
+  .sday .sc { font-size: .8rem; color: var(--amber); white-space: nowrap; }
+  .sday.next { background: color-mix(in srgb, var(--amber) 10%, transparent); border-radius: 8px; }
+  .sbtns { display: flex; flex-wrap: wrap; gap: 8px; }
+  .sbtns .btn { padding: 8px 12px; font-size: .88rem; }
   .dsum { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   .dsum div { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
   .dsum b { display: block; font: 600 1.05rem/1.25 var(--display); color: var(--amber); }
@@ -235,6 +243,10 @@
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg>
       <span>List</span><b class="count" id="listCount"></b>
     </button>
+    <button class="icon-btn brief-btn" id="bibleBtn" aria-label="Bible study">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v16H6.5A1.5 1.5 0 0 0 5 20.5z"/><path d="M5 20.5A1.5 1.5 0 0 0 6.5 22H19"/><path d="M12 7v6M9.5 9.5h5"/></svg>
+      <span>Bible</span>
+    </button>
     <button class="icon-btn brief-btn" id="debtBtn" aria-label="Debt payoff">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 2v20M17 6.5c0-1.9-2.2-3.5-5-3.5s-5 1.6-5 3.5 2.2 3.2 5 3.5 5 1.6 5 3.5-2.2 3.5-5 3.5-5-1.6-5-3.5"/></svg>
       <span>Debts</span>
@@ -332,6 +344,26 @@
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1"/><path d="M12 18v4"/></svg>
     </button>
   </footer>
+
+  <dialog id="studyDlg">
+    <div class="sheet">
+      <h2 tabindex="-1" autofocus style="outline:none">Bible study</h2>
+      <div id="studyBody" style="display:grid;gap:12px"></div>
+      <h2 style="font-size:1.05rem">Start a new plan</h2>
+      <div class="dadd">
+        <select id="spScope" class="wide" style="background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px">
+          <option>Whole Bible</option><option>New Testament</option><option>Old Testament</option><option>Gospels</option>
+          <option>Psalms</option><option>Proverbs</option><option>Wisdom books</option><option>Paul’s letters</option><option>Torah</option>
+          <option value="custom">Specific books…</option>
+        </select>
+        <input id="spBooks" class="wide" type="text" placeholder="Books, such as Romans, James" hidden>
+        <input id="spWeeks" type="text" inputmode="numeric" placeholder="Weeks, such as 52">
+        <button class="btn primary" id="spCreate">Create plan</button>
+      </div>
+      <small style="color:var(--muted)">Readings are Monday through Saturday; Sunday is a rest and recap day. For a theme, such as faith or prayer, just ask DOT.</small>
+      <div class="actions"><button class="btn danger" id="spClear">Delete plan</button><button class="btn primary" id="studyClose">Close</button></div>
+    </div>
+  </dialog>
 
   <dialog id="debtDlg">
     <div class="sheet">
@@ -473,9 +505,9 @@
     try {
       const s = JSON.parse(localStorage.getItem(KEY));
       if (s) return { settings: { ...DEFAULTS, ...s.settings }, history: Array.isArray(s.history) ? s.history : [],
-        todos: Array.isArray(s.todos) ? s.todos : [], qnotes: Array.isArray(s.qnotes) ? s.qnotes : [], debts: Array.isArray(s.debts) ? s.debts : [], nextId: s.nextId || 1, tr: s.tr || { on: false, lang: "Spanish" } };
+        todos: Array.isArray(s.todos) ? s.todos : [], qnotes: Array.isArray(s.qnotes) ? s.qnotes : [], debts: Array.isArray(s.debts) ? s.debts : [], nextId: s.nextId || 1, tr: s.tr || { on: false, lang: "Spanish" }, study: s.study || null };
     } catch (e) {}
-    return { settings: { ...DEFAULTS }, history: [], todos: [], qnotes: [], debts: [], nextId: 1, tr: { on: false, lang: "Spanish" } };
+    return { settings: { ...DEFAULTS }, history: [], todos: [], qnotes: [], debts: [], nextId: 1, tr: { on: false, lang: "Spanish" }, study: null };
   }
   let state = load();
   function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
@@ -720,6 +752,146 @@
     }
   }
 
+  // ---------- Bible study plan ----------
+  const BOOKS = [["Genesis",50],["Exodus",40],["Leviticus",27],["Numbers",36],["Deuteronomy",34],["Joshua",24],["Judges",21],["Ruth",4],
+    ["1 Samuel",31],["2 Samuel",24],["1 Kings",22],["2 Kings",25],["1 Chronicles",29],["2 Chronicles",36],["Ezra",10],["Nehemiah",13],["Esther",10],
+    ["Job",42],["Psalms",150],["Proverbs",31],["Ecclesiastes",12],["Song of Solomon",8],["Isaiah",66],["Jeremiah",52],["Lamentations",5],["Ezekiel",48],
+    ["Daniel",12],["Hosea",14],["Joel",3],["Amos",9],["Obadiah",1],["Jonah",4],["Micah",7],["Nahum",3],["Habakkuk",3],["Zephaniah",3],["Haggai",2],
+    ["Zechariah",14],["Malachi",4],["Matthew",28],["Mark",16],["Luke",24],["John",21],["Acts",28],["Romans",16],["1 Corinthians",16],["2 Corinthians",13],
+    ["Galatians",6],["Ephesians",6],["Philippians",4],["Colossians",4],["1 Thessalonians",5],["2 Thessalonians",3],["1 Timothy",6],["2 Timothy",4],
+    ["Titus",3],["Philemon",1],["Hebrews",13],["James",5],["1 Peter",5],["2 Peter",3],["1 John",5],["2 John",1],["3 John",1],["Jude",1],["Revelation",22]];
+  const bookIdx = (n) => BOOKS.findIndex((b) => b[0] === n);
+  const range = (a, b) => BOOKS.slice(bookIdx(a), bookIdx(b) + 1).map((x) => x[0]);
+  const SCOPES = {
+    "whole bible": BOOKS.map((b) => b[0]), "bible": BOOKS.map((b) => b[0]), "old testament": range("Genesis", "Malachi"),
+    "new testament": range("Matthew", "Revelation"), "gospels": range("Matthew", "John"), "psalms": ["Psalms"], "proverbs": ["Proverbs"],
+    "wisdom books": range("Job", "Song of Solomon"), "wisdom": range("Job", "Song of Solomon"), "paul’s letters": range("Romans", "Philemon"),
+    "paul's letters": range("Romans", "Philemon"), "pauls letters": range("Romans", "Philemon"), "torah": range("Genesis", "Deuteronomy"), "pentateuch": range("Genesis", "Deuteronomy")
+  };
+  function findBook(raw) {
+    let n = String(raw).toLowerCase().replace(/\./g, "").replace(/\b(first|1st|i)\s+/, "1 ").replace(/\b(second|2nd|ii)\s+/, "2 ").replace(/\b(third|3rd|iii)\s+/, "3 ").trim();
+    if (/^(song of songs|songs|song)$/.test(n)) n = "song of solomon";
+    if (n === "psalm") n = "psalms";
+    if (n === "revelations") n = "revelation";
+    const exact = BOOKS.find((b) => b[0].toLowerCase() === n);
+    if (exact) return exact[0];
+    const pre = n.length >= 3 ? BOOKS.filter((b) => b[0].toLowerCase().startsWith(n)) : [];
+    return pre.length === 1 ? pre[0][0] : null;
+  }
+  function booksFor(scope) {
+    const k = String(scope || "").toLowerCase().trim();
+    if (SCOPES[k]) return SCOPES[k];
+    return k.split(/,|;|\band\b|&/).map((x) => findBook(x.trim())).filter(Boolean);
+  }
+  function fmtRef(chs) {
+    const groups = [];
+    chs.forEach(([b, c]) => { const g = groups[groups.length - 1]; if (g && g.b === b && g.to === c - 1) g.to = c; else groups.push({ b, from: c, to: c }); });
+    return groups.map((g) => (g.b === "Psalms" && g.from === g.to ? "Psalm" : g.b) + " " + (g.from === g.to ? g.from : g.from + "-" + g.to)).join("; ");
+  }
+  const ymd = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  const parseYmd = (x) => { const [y, m, d] = x.split("-").map(Number); return new Date(y, m - 1, d); };
+  function readingDaysBetween(startStr, endDate) {
+    let n = 0; const d = parseYmd(startStr);
+    while (d <= endDate) { if (d.getDay() !== 0) n++; d.setDate(d.getDate() + 1); }
+    return n;
+  }
+  function makePlan(title, readings) {
+    state.study = { title, start: todayStr(), days: readings.map((ref, i) => ({ n: i + 1, ref })), done: {}, scores: {} };
+    save(); renderStudy();
+    return "Bible plan created: " + title + " — " + readings.length + " readings, Monday through Saturday";
+  }
+  function planFromBooks(scope, weeks) {
+    const books = booksFor(scope);
+    if (!books.length) return null;
+    const chs = []; books.forEach((b) => { const n = BOOKS[bookIdx(b)][1]; for (let c = 1; c <= n; c++) chs.push([b, c]); });
+    const days = Math.max(1, Math.min(chs.length, Math.round((Number(weeks) || 52) * 6)));
+    const readings = [];
+    for (let i = 0; i < days; i++) { const a = Math.floor((i * chs.length) / days), b = Math.floor(((i + 1) * chs.length) / days); readings.push(fmtRef(chs.slice(a, Math.max(b, a + 1)))); }
+    const label = SCOPES[String(scope).toLowerCase().trim()] ? String(scope).replace(/\b\w/g, (m) => m.toUpperCase()) : books.join(", ");
+    return makePlan(label + " in " + (Number(weeks) || 52) + " weeks", readings);
+  }
+  function studyStatus() {
+    const st = state.study; if (!st) return null;
+    const total = st.days.length, doneN = Object.keys(st.done).length;
+    const next = st.days.find((d) => !st.done[d.n]) || null;
+    const yday = new Date(); yday.setDate(yday.getDate() - 1); yday.setHours(23, 59, 59, 0);
+    const expected = Math.min(total, readingDaysBetween(st.start, yday)); // today's reading isn't late until tomorrow
+    const behind = Math.max(0, expected - doneN);
+    const sc = Object.values(st.scores);
+    const avg = sc.length ? Math.round((sc.reduce((a, x) => a + x.c, 0) / Math.max(1, sc.reduce((a, x) => a + x.t, 0))) * 100) : null;
+    const lastRead = st.days.filter((d) => st.done[d.n]).pop() || null;
+    return { total, doneN, next, behind, avg, lastRead, pct: Math.round((doneN / total) * 100), sunday: new Date().getDay() === 0 };
+  }
+  function studyForPrompt() {
+    const st = state.study, x = studyStatus();
+    if (!st) return "No plan yet.";
+    const lastWeek = st.days.filter((d) => st.done[d.n] && st.done[d.n] >= ymd(new Date(Date.now() - 7 * 86400000)))
+      .map((d) => "Day " + d.n + " " + d.ref + (st.scores[d.n] ? " (quiz " + st.scores[d.n].c + "/" + st.scores[d.n].t + ")" : " (no quiz yet)")).join("; ");
+    return "Plan: " + st.title + ". Started " + st.start + ". Completed " + x.doneN + " of " + x.total + " readings (" + x.pct + "%)." +
+      (x.next ? " Next reading: Day " + x.next.n + ", " + x.next.ref + "." : " Plan complete.") +
+      (x.behind ? " He is " + x.behind + " reading" + (x.behind > 1 ? "s" : "") + " behind schedule." : " He is on schedule.") +
+      (x.lastRead ? " Most recent reading finished: Day " + x.lastRead.n + ", " + x.lastRead.ref + (st.scores[x.lastRead.n] ? ", quiz done." : ", quiz not taken yet.") : "") +
+      (x.avg !== null ? " Average quiz score: " + x.avg + "%." : "") +
+      " Today is " + (x.sunday ? "Sunday, a rest and recap day." : new Date().toLocaleDateString("en-US", { weekday: "long" }) + ", a reading and quiz day.") +
+      (lastWeek ? " Past seven days: " + lastWeek + "." : "");
+  }
+  function applyStudyCommand(cmd, arg) {
+    const parts = arg.split("|").map((x) => x.trim());
+    if (cmd === "STUDY_PLAN") return planFromBooks(parts[0], parts[1]);
+    if (cmd === "STUDY_THEME") {
+      const refs = (parts[1] || "").split(";").map((x) => x.trim()).filter(Boolean);
+      return refs.length ? makePlan(parts[0] || "Topical study", refs) : null;
+    }
+    const st = state.study; if (!st) return null;
+    const n = Number(String(parts[0]).replace(/[^\d]/g, "")), d = st.days.find((x) => x.n === n);
+    if (!d) return null;
+    if (cmd === "STUDY_READ") { st.done[n] = todayStr(); save(); renderStudy(); return "Reading complete: Day " + n + ", " + d.ref; }
+    if (cmd === "STUDY_SCORE") {
+      const c = Number(parts[1]), t = Number(parts[2]);
+      if (!(t > 0) || isNaN(c)) return null;
+      st.scores[n] = { c: Math.max(0, Math.min(c, t)), t, date: todayStr() };
+      if (!st.done[n]) st.done[n] = todayStr();
+      save(); renderStudy();
+      return "Quiz recorded: Day " + n + " — " + c + " of " + t;
+    }
+    return null;
+  }
+  function renderStudy() {
+    const box = $("studyBody"); if (!box) return;
+    box.innerHTML = "";
+    const st = state.study, x = studyStatus();
+    if (!st) { const p = document.createElement("p"); p.className = "empty-note"; p.textContent = "No plan yet. Create one below, or ask DOT for a plan on a book or theme."; box.append(p); return; }
+    const sum = document.createElement("div"); sum.className = "dsum";
+    [[x.doneN + " / " + x.total, "Readings done"], [x.avg !== null ? x.avg + "%" : "—", "Quiz average"], [x.behind ? x.behind + " behind" : "On track", "Schedule"]].forEach(([v, k]) => {
+      const d = document.createElement("div"), b = document.createElement("b"), sm = document.createElement("small"); b.textContent = v; sm.textContent = k; d.append(b, sm); sum.append(d);
+    });
+    const ttl = document.createElement("strong"); ttl.textContent = st.title; ttl.style.fontFamily = "var(--display)";
+    const bar = document.createElement("div"); bar.className = "bar"; const fill = document.createElement("i"); fill.style.width = x.pct + "%"; bar.append(fill);
+    const btns = document.createElement("div"); btns.className = "sbtns";
+    const mk = (label, msg, primary) => { const b = document.createElement("button"); b.className = "btn" + (primary ? " primary" : ""); b.textContent = label;
+      b.onclick = () => { $("studyDlg").close(); unlockSpeech(); lastInputVoice = false; ask(msg); }; return b; };
+    if (x.sunday) btns.append(mk("Sunday recap", "It's Sunday. Give me my Bible study recap for the week.", true));
+    else if (x.next) {
+      btns.append(mk("Read to me", "Read today's Bible reading to me: Day " + x.next.n + ", " + x.next.ref + ".", true));
+      btns.append(mk("I've read it — quiz me", "I finished Day " + x.next.n + ", " + x.next.ref + ". Quiz me on it."));
+    }
+    if (x.lastRead && !st.scores[x.lastRead.n] && !x.sunday) btns.append(mk("Quiz on Day " + x.lastRead.n, "Quiz me on Day " + x.lastRead.n + ", " + x.lastRead.ref + "."));
+    const list = document.createElement("div");
+    const startI = Math.max(0, (x.next ? x.next.n : x.total) - 4);
+    st.days.slice(startI, startI + 9).forEach((d) => {
+      const row = document.createElement("div"); row.className = "sday" + (x.next && d.n === x.next.n ? " next" : "");
+      const a = document.createElement("span"); a.className = "d"; a.textContent = "Day " + d.n;
+      const r = document.createElement("span"); r.className = "r"; r.textContent = d.ref;
+      const ok = document.createElement("span"); ok.className = "ok"; ok.textContent = st.done[d.n] ? "✓" : "";
+      const scE = document.createElement("span"); scE.className = "sc"; scE.textContent = st.scores[d.n] ? st.scores[d.n].c + "/" + st.scores[d.n].t : "";
+      const mark = document.createElement("button"); mark.className = "btn"; mark.style.cssText = "padding:4px 10px;font-size:.78rem";
+      mark.textContent = st.done[d.n] ? "Undo" : "Mark read";
+      mark.onclick = () => { if (st.done[d.n]) delete st.done[d.n]; else st.done[d.n] = todayStr(); save(); renderStudy(); };
+      row.append(a, r, ok, scE, mark); list.append(row);
+    });
+    box.append(ttl, sum, bar, btns, list);
+  }
+
   // ---------- color theme ----------
   function applyPalette(name) {
     const p = ["holo", "emerald", "plasma"].includes(name) ? name : "amber";
@@ -811,7 +983,7 @@
     document.querySelectorAll(".report-btn").forEach((x) => x.remove());
     unlockSpeech(); lastInputVoice = false;
     const h = new Date().getHours(), part = h < 12 ? "Morning" : h < 17 ? "Afternoon" : "Evening";
-    ask(part + " briefing, please: the Helendale weather, my calendar for today, a short silver update, my to-do list, and the top three news headlines.");
+    ask(part + " briefing, please: the Helendale weather, my calendar for today, a short silver update, my to-do list, my Bible reading for today, and the top three news headlines.");
   }
   function render() {
     logEl.innerHTML = "";
@@ -876,7 +1048,7 @@ Use MEMO only for things worth keeping long term. Never read the MEMO line aloud
       `BRIEFING
 When ${name} asks for a briefing, gather everything with your tools first: Helendale weather, his calendar for today if you have a calendar tool, silver prices with his stack, and the top three national news headlines from one web search.
 Then deliver one spoken rundown of about 170 words in this order:
-a short greeting suited to the time of day; the weather now, the high and low, and anything notable; today's schedule, or say his calendar is clear; silver in two sentences covering price and direction, buying window status, and stack progress; his to-do list in one sentence, naming overdue and due-today items and how many others are open; three headlines in one sentence each; then close with one short question or suggestion.
+a short greeting suited to the time of day; the weather now, the high and low, and anything notable; today's schedule, or say his calendar is clear; silver in two sentences covering price and direction, buying window status, and stack progress; his to-do list in one sentence, naming overdue and due-today items and how many others are open; his Bible reading for today in one sentence, including whether he is behind, or on Sunday that it is a rest day; three headlines in one sentence each; then close with one short question or suggestion.
 Do not give the full silver report unless he asks for it, and do not state the clock time. If any source is unavailable, say so in a few words and continue with the rest.`,
 
       `SCRIPTURE AND SERMON PREP
@@ -902,6 +1074,14 @@ When he says an episode is finished, add one final separate line in exactly this
       `TRANSLATOR MODE
 When ${name} asks to start translator mode, or to translate everything he says into a language, confirm in one short sentence and add one final separate line in exactly this form, naming the language in English: TRANSLATE_ON: Spanish
 Never read that line aloud. For a single phrase, such as "how do you say God bless you in Spanish," answer normally with the translation and one short pronunciation tip.`,
+
+      `BIBLE STUDY PLAN
+${studyForPrompt()}
+Creating a plan: when he asks for a reading plan on whole books, add one final line: STUDY_PLAN: scope or books | weeks. Scope can be Whole Bible, New Testament, Old Testament, Gospels, Psalms, Proverbs, Wisdom books, Paul's letters, or Torah, or a list of book names such as Romans, James. The app builds the daily readings, Monday through Saturday. For a theme such as faith or prayer, choose 18 to 60 well-known passages and add one final line: STUDY_THEME: plan title | reference; reference; reference. Ask how many weeks if he did not say.
+Reading aloud: read one chapter per reply, exactly as get_scripture returns it, starting with the reference, then ask whether to continue. When he finishes a day's reading, add STUDY_READ: day number.
+Quiz, Monday through Saturday, when he asks for it or says he finished the reading: first look up the passage with get_scripture so every question and answer comes from the actual text. Ask four questions, one at a time, and wait for each answer: two on key facts, one on meaning or theme, and one on application to his life. After each answer, say whether it is right, cite the verse that settles it, and add one sentence of insight. Accept answers that are substantially correct. The application question has no wrong answer; affirm it and add one thought. Score only the first three. After the last question, give the score and add one final line: STUDY_SCORE: day number | correct | 3.
+Sunday is a rest day: no quiz. If asked, give a short recap of the week's readings and quiz scores and preview Monday's reading.
+Never read these control lines aloud or mention them.`,
 
       `TO-DO LIST AND NOTES
 ${listForPrompt()}
@@ -963,7 +1143,9 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
     saveMetals(m);
   }
   const END_CONVO = /\b(that'?s all|that will be all|stop listening|goodbye|good night|end conversation)\b/i;
+  let speechQueue = [], queueOpts = null;
   function doneSpeaking() {
+    if (speechQueue.length) { const next = speechQueue.shift(); speakOne(next, queueOpts); return; }
     setMode("idle");
     if (state.settings.convo && lastInputVoice && SR && !navigator.standalone) {
       setTimeout(() => { if (document.body.dataset.mode === "idle" && !busy) toggleListening(); }, 500);
@@ -1011,9 +1193,9 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
       if (stackNew !== null && !isNaN(stackNew)) state.settings.stackOz = stackNew;
       recordSilver(data.metals);
       const listChanges = [];
-      reply = reply.replace(/^\s*(TODO_ADD|TODO_DONE|TODO_UNDONE|TODO_DELETE|NOTE_DELETE|NOTE|DEBT_ADD|DEBT_PAY|DEBT_BALANCE|DEBT_TERMS|DEBT_PLAN|DEBT_DELETE):\s*(.+)$/gim, (m, cmd, arg) => {
+      reply = reply.replace(/^\s*(TODO_ADD|TODO_DONE|TODO_UNDONE|TODO_DELETE|NOTE_DELETE|NOTE|DEBT_ADD|DEBT_PAY|DEBT_BALANCE|DEBT_TERMS|DEBT_PLAN|DEBT_DELETE|STUDY_PLAN|STUDY_THEME|STUDY_READ|STUDY_SCORE):\s*(.+)$/gim, (m, cmd, arg) => {
         const C = cmd.toUpperCase();
-        const msg = C.startsWith("DEBT_") ? applyDebtCommand(C, arg.trim()) : applyListCommand(C, arg.trim());
+        const msg = C.startsWith("DEBT_") ? applyDebtCommand(C, arg.trim()) : C.startsWith("STUDY_") ? applyStudyCommand(C, arg.trim()) : applyListCommand(C, arg.trim());
         if (msg) listChanges.push(msg);
         return "";
       }).trim() || "Done.";
@@ -1120,6 +1302,7 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
     if (actx && actx.state !== "running") actx.resume().catch(() => {});
   });
   function stopAudio() {
+    speechQueue = [];
     stopVU();
     if (current) { try { current.stop(); } catch (e) {} current = null; }
     try { if (!voiceEl.paused) voiceEl.pause(); } catch (e) {}
@@ -1288,24 +1471,28 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
   function startVU(a) { orb.setAnalyser(a); }
   function stopVU() { orb.setAnalyser(null); }
   const ttsCache = new Map();
-  async function fetchVoice(text, s) {
+  function fetchVoice(text, s) {
     const key = text + "|" + (Number(s.rate) || 1);
     if (ttsCache.has(key)) return ttsCache.get(key);
-    const r = await fetch(s.workerUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Access-Code": s.accessCode || "" },
-      body: JSON.stringify({ action: "tts", text, speed: Math.max(0.7, Math.min(1.2, Number(s.rate) || 1)) })
-    });
-    if (!r.ok) {
-      let d = {};
-      try { d = await r.json(); } catch (e) {}
-      throw new Error(d.error || "voice error " + r.status);
-    }
-    const buf = await r.arrayBuffer();
-    if (!buf || buf.byteLength < 100) throw new Error("the voice service sent back no audio");
-    ttsCache.set(key, buf);
+    const job = (async () => {
+      const r = await fetch(s.workerUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Access-Code": s.accessCode || "" },
+        body: JSON.stringify({ action: "tts", text, speed: Math.max(0.7, Math.min(1.2, Number(s.rate) || 1)) })
+      });
+      if (!r.ok) {
+        let d = {};
+        try { d = await r.json(); } catch (e) {}
+        throw new Error(d.error || "voice error " + r.status);
+      }
+      const buf = await r.arrayBuffer();
+      if (!buf || buf.byteLength < 100) throw new Error("the voice service sent back no audio");
+      return buf;
+    })();
+    ttsCache.set(key, job);
+    job.catch(() => ttsCache.delete(key));
     if (ttsCache.size > 12) ttsCache.delete(ttsCache.keys().next().value);
-    return buf;
+    return job;
   }
   async function speakCloud(text, s) {
     if (!s.workerUrl) throw new Error("no Worker address");
@@ -1391,10 +1578,23 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
     setMode("idle");
     voiceStatus("Voice paused by the iPad. Tap anywhere, or tap Hear again on her reply.", true);
   }
+  function splitSpeech(text) {
+    const parts = String(text).match(/[^.!?\n]+[.!?]*["”’)]*\s*|\n+/g) || [String(text)];
+    const out = []; let cur = "";
+    for (const p of parts) { if ((cur + p).length > 1800 && cur.trim()) { out.push(cur.trim()); cur = ""; } cur += p; }
+    if (cur.trim()) out.push(cur.trim());
+    return out.length ? out : [String(text)];
+  }
   function speak(text, opts) {
     const s = { ...state.settings, ...(opts || {}) };
     if (!s.autoSpeak || !String(text || "").trim()) { setMode("idle"); return; }
     stopAudio();
+    const chunks = splitSpeech(text);
+    speechQueue = chunks.slice(1); queueOpts = s;
+    speakOne(chunks[0], s);
+  }
+  function speakOne(text, s) {
+    if (s.engine === "cloud" && s.workerUrl && speechQueue.length) fetchVoice(speechQueue[0], s).catch(() => {});
     if (s.engine === "cloud") {
       speakCloud(text, s).catch((e) => {
         voiceStatus("Cloud voice failed (" + e.message + "). Using the iPad voice.");
@@ -1505,6 +1705,19 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
   $("briefBtn").onclick = runBriefing;
   $("trThem").onclick = () => toggleListening(true);
   $("trExit").onclick = () => { state.tr.on = false; save(); renderTrBar(); note("Translator mode off."); };
+  const studyDlg = $("studyDlg");
+  $("bibleBtn").onclick = () => { renderStudy(); studyDlg.showModal(); };
+  $("studyClose").onclick = () => studyDlg.close();
+  studyDlg.addEventListener("click", (e) => { if (e.target === studyDlg) studyDlg.close(); });
+  $("spScope").onchange = () => { $("spBooks").hidden = $("spScope").value !== "custom"; };
+  $("spCreate").onclick = () => {
+    const scope = $("spScope").value === "custom" ? $("spBooks").value : $("spScope").value;
+    if (state.study && !confirm("Replace your current Bible plan?")) return;
+    const msg = planFromBooks(scope, $("spWeeks").value || 52);
+    if (!msg) { alert("I couldn’t find those books. Try names like Romans, James."); return; }
+    $("spWeeks").value = ""; $("spBooks").value = "";
+  };
+  $("spClear").onclick = () => { if (state.study && confirm("Delete your Bible plan and its progress?")) { state.study = null; save(); renderStudy(); } };
   const debtDlg = $("debtDlg");
   $("debtBtn").onclick = () => { renderDebts(); debtDlg.showModal(); };
   $("debtClose").onclick = () => debtDlg.close();
