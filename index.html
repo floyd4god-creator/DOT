@@ -93,6 +93,19 @@
   }
   .icon-btn:hover { color: var(--text); border-color: var(--muted); }
   .brief-btn { width: auto; border-radius: 22px; padding: 0 14px 0 12px; gap: 6px; display: flex; align-items: center; color: var(--amber); border-color: color-mix(in srgb, var(--amber) 45%, var(--line)); font-weight: 500; }
+  .bstage { font: 600 .82rem var(--display); letter-spacing: .08em; color: var(--amber); margin: 6px 0 2px; text-transform: uppercase; }
+  .bk { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--bg) 70%, transparent); }
+  .bk.reading { border-color: var(--amber); }
+  .bk.done { opacity: .78; }
+  .bk .t { font-weight: 600; }
+  .bk .a { color: var(--muted); font-size: .82rem; }
+  .bk .chip { font-size: .72rem; border-radius: 10px; padding: 2px 9px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .bk.reading .chip { color: var(--amber); border-color: var(--amber); }
+  .bk.done .chip { color: #3fd88a; border-color: #3fd88a; }
+  .bk .acts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+  .bk .acts .btn { padding: 5px 10px; font-size: .78rem; }
+  .pb { border-left: 3px solid var(--amber); padding: 6px 10px; background: color-mix(in srgb, var(--bg) 70%, transparent); border-radius: 6px; }
+  .pb small { display: block; color: var(--muted); font-size: .76rem; }
   .srow { display: grid; grid-template-columns: 70px 1fr auto 76px; align-items: center; gap: 10px; padding: 9px 4px; border-bottom: 1px solid var(--line); }
   .srow .sym { font: 600 1rem var(--display); color: var(--amber); }
   .srow .px { font-variant-numeric: tabular-nums; }
@@ -251,6 +264,10 @@
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg>
       <span>List</span><b class="count" id="listCount"></b>
     </button>
+    <button class="icon-btn brief-btn" id="booksBtn" aria-label="Wealth reading path">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5a1 1 0 0 1 1-1h3v15H5a1 1 0 0 1-1-1z"/><path d="M8 4h4v15H8z"/><path d="M13.5 5.2l3.4-.9 3.6 13.6-3.4.9z"/></svg>
+      <span>Books</span>
+    </button>
     <button class="icon-btn brief-btn" id="bibleBtn" aria-label="Bible study">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v16H6.5A1.5 1.5 0 0 0 5 20.5z"/><path d="M5 20.5A1.5 1.5 0 0 0 6.5 22H19"/><path d="M12 7v6M9.5 9.5h5"/></svg>
       <span>Bible</span>
@@ -356,6 +373,19 @@
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1"/><path d="M12 18v4"/></svg>
     </button>
   </footer>
+
+  <dialog id="booksDlg">
+    <div class="sheet">
+      <h2 tabindex="-1" autofocus style="outline:none">Wealth reading path</h2>
+      <div class="sbtns">
+        <button class="btn primary" id="bkTabPath">Reading path</button>
+        <button class="btn" id="bkTabPlay">Empire Playbook</button>
+      </div>
+      <div id="bkPath" style="display:grid;gap:12px"></div>
+      <div id="bkPlay" style="display:none;gap:10px"></div>
+      <div class="actions"><span></span><button class="btn primary" id="bkClose">Close</button></div>
+    </div>
+  </dialog>
 
   <dialog id="stockDlg">
     <div class="sheet">
@@ -538,9 +568,9 @@
     try {
       const s = JSON.parse(localStorage.getItem(KEY));
       if (s) return { settings: { ...DEFAULTS, ...s.settings }, history: Array.isArray(s.history) ? s.history : [],
-        todos: Array.isArray(s.todos) ? s.todos : [], qnotes: Array.isArray(s.qnotes) ? s.qnotes : [], debts: Array.isArray(s.debts) ? s.debts : [], nextId: s.nextId || 1, tr: s.tr || { on: false, lang: "Spanish" }, study: s.study || null };
+        todos: Array.isArray(s.todos) ? s.todos : [], qnotes: Array.isArray(s.qnotes) ? s.qnotes : [], debts: Array.isArray(s.debts) ? s.debts : [], nextId: s.nextId || 1, tr: s.tr || { on: false, lang: "Spanish" }, study: s.study || null, books: s.books || null };
     } catch (e) {}
-    return { settings: { ...DEFAULTS }, history: [], todos: [], qnotes: [], debts: [], nextId: 1, tr: { on: false, lang: "Spanish" }, study: null };
+    return { settings: { ...DEFAULTS }, history: [], todos: [], qnotes: [], debts: [], nextId: 1, tr: { on: false, lang: "Spanish" }, study: null, books: null };
   }
   let state = load();
   function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
@@ -925,6 +955,160 @@
     box.append(ttl, sum, bar, btns, list);
   }
 
+  // ---------- wealth reading path ----------
+  const STAGES = ["Foundations", "Banking and money", "Investing", "Building and protecting wealth", "Family legacy", "Other books"];
+  const STARTER = [
+    ["The Richest Man in Babylon", "George S. Clason", 0], ["The Total Money Makeover", "Dave Ramsey", 0],
+    ["The Psychology of Money", "Morgan Housel", 0], ["The Millionaire Next Door", "Thomas J. Stanley and William D. Danko", 0],
+    ["Money, Possessions, and Eternity", "Randy Alcorn", 0],
+    ["The Ascent of Money", "Niall Ferguson", 1], ["Lords of Finance", "Liaquat Ahamed", 1], ["Becoming Your Own Banker", "R. Nelson Nash", 1],
+    ["The Little Book of Common Sense Investing", "John C. Bogle", 2], ["The Simple Path to Wealth", "JL Collins", 2],
+    ["A Random Walk Down Wall Street", "Burton G. Malkiel", 2], ["The Essays of Warren Buffett", "Warren Buffett, edited by Lawrence A. Cunningham", 2],
+    ["The Intelligent Investor", "Benjamin Graham", 2],
+    ["Tax-Free Wealth", "Tom Wheelwright", 3], ["The E-Myth Revisited", "Michael E. Gerber", 3], ["The Book on Rental Property Investing", "Brandon Turner", 3],
+    ["Family Wealth: Keeping It in the Family", "James E. Hughes Jr.", 4], ["Preparing Heirs", "Roy Williams and Vic Preisser", 4],
+    ["The Cycle of the Gift", "James E. Hughes Jr., Susan E. Massenzio, and Keith Whitaker", 4]
+  ];
+  function booksState() {
+    if (!state.books) {
+      state.books = { goal: 12, list: STARTER.map(([title, author, stage]) => ({ id: state.nextId++, title, author, stage, status: "next" })), playbook: [] };
+      save();
+    }
+    return state.books;
+  }
+  const findBk = (arg) => {
+    const b = booksState(), t = String(arg).trim(), n = Number(t.replace(/[^\d]/g, ""));
+    return b.list.find((x) => x.id === n && /^\s*#?\d+\s*$/.test(t)) || b.list.find((x) => x.title.toLowerCase() === t.toLowerCase()) ||
+      b.list.find((x) => x.title.toLowerCase().includes(t.toLowerCase()) && t.length > 3) || null;
+  };
+  const daysFrom = (n) => ymd(new Date(Date.now() + n * 86400000));
+  function booksForPrompt() {
+    const b = booksState(), yr = String(new Date().getFullYear());
+    const doneYr = b.list.filter((x) => x.status === "done" && (x.finished || "").startsWith(yr)).length;
+    const due = b.list.filter((x) => x.reviewDue && x.reviewDue <= todayStr());
+    const lines = STAGES.map((st, i) => {
+      const items = b.list.filter((x) => x.stage === i);
+      return items.length ? st + ": " + items.map((x) => "#" + x.id + " " + x.title + " (" + x.author + ") [" + x.status + (x.progress ? ", " + x.progress : "") + (x.check ? ", last check " + x.check.c + "/" + x.check.t : "") + "]").join("; ") : "";
+    }).filter(Boolean).join("\n");
+    return lines + "\nYearly goal: " + b.goal + " books; finished this year: " + doneYr + "." +
+      (due.length ? "\nReview due now for: " + due.map((x) => "#" + x.id + " " + x.title + (x.review ? " (focus: " + x.review + ")" : "")).join("; ") + "." : "") +
+      "\nEmpire Playbook principles saved: " + b.playbook.length + (b.playbook.length ? ". Most recent: " + b.playbook.slice(-5).map((p) => p.text).join(" | ") : "") + ".";
+  }
+  function applyBookCommand(cmd, arg) {
+    const b = booksState(), parts = arg.split("|").map((x) => x.trim());
+    if (cmd === "BOOK_ADD") {
+      if (!parts[0]) return null;
+      const si = STAGES.findIndex((st) => st.toLowerCase() === String(parts[2] || "").toLowerCase());
+      const bk = { id: state.nextId++, title: parts[0], author: parts[1] || "", stage: si >= 0 ? si : 5, status: "next" };
+      b.list.push(bk); save(); renderBooks();
+      return "Added to your reading path: " + bk.title;
+    }
+    if (cmd === "PLAYBOOK") {
+      const bk = findBk(parts[0]); const text = parts.slice(1).join(" | ") || "";
+      if (!text) return null;
+      b.playbook.push({ id: state.nextId++, book: bk ? bk.title : parts[0], text, date: todayStr() }); save(); renderBooks();
+      return "Empire Playbook: " + text;
+    }
+    const bk = findBk(parts[0]); if (!bk) return null;
+    if (cmd === "BOOK_START") { bk.status = "reading"; bk.started = bk.started || todayStr(); save(); renderBooks(); return "Now reading: " + bk.title; }
+    if (cmd === "BOOK_PROGRESS") { bk.progress = parts[1] || ""; if (bk.status === "next") { bk.status = "reading"; bk.started = todayStr(); } save(); renderBooks(); return bk.title + ": " + bk.progress; }
+    if (cmd === "BOOK_DONE") { bk.status = "done"; bk.finished = todayStr(); bk.progress = ""; save(); renderBooks(); return "Finished: " + bk.title + " 🎉"; }
+    if (cmd === "BOOK_SKIP") { bk.status = "skipped"; save(); renderBooks(); return "Skipped: " + bk.title; }
+    if (cmd === "BOOK_REMOVE") { b.list = b.list.filter((x) => x !== bk); save(); renderBooks(); return "Removed from your path: " + bk.title; }
+    if (cmd === "BOOK_CHECK") {
+      const c = Number(parts[1]), t = Number(parts[2]);
+      if (!(t > 0) || isNaN(c)) return null;
+      bk.check = { c: Math.max(0, Math.min(c, t)), t, date: todayStr() };
+      bk.review = parts[3] || "";
+      bk.reviews = (bk.reviews || 0);
+      bk.reviewDue = daysFrom(bk.reviews === 0 ? 14 : 45);
+      save(); renderBooks();
+      return "Understanding check recorded: " + bk.title + " — " + c + " of " + t + (bk.review ? "; review " + bk.review : "") + ". Next review " + bk.reviewDue;
+    }
+    if (cmd === "BOOK_REVIEWED") {
+      bk.reviews = (bk.reviews || 0) + 1;
+      bk.reviewDue = bk.reviews >= 2 ? null : daysFrom(45);
+      save(); renderBooks();
+      return "Review complete: " + bk.title + (bk.reviewDue ? ". Next review " + bk.reviewDue : ". Principles locked in");
+    }
+    return null;
+  }
+  function renderBooks() {
+    const box = $("bkPath"); if (!box) return;
+    const b = booksState(), yr = String(new Date().getFullYear());
+    box.innerHTML = "";
+    const active = b.list.filter((x) => x.status !== "skipped"), done = active.filter((x) => x.status === "done").length;
+    const doneYr = b.list.filter((x) => x.status === "done" && (x.finished || "").startsWith(yr)).length;
+    const cur = b.list.find((x) => x.status === "reading");
+    const sum = document.createElement("div"); sum.className = "dsum";
+    [[done + " / " + active.length, "Path complete"], [doneYr + " / " + b.goal, yr + " goal"], [cur ? cur.title : "—", "Reading now"]].forEach(([v, k]) => {
+      const d = document.createElement("div"), x = document.createElement("b"), sm = document.createElement("small"); x.textContent = v; sm.textContent = k;
+      if (k === "Reading now") x.style.fontSize = ".9rem"; d.append(x, sm); sum.append(d);
+    });
+    const bar = document.createElement("div"); bar.className = "bar"; const fill = document.createElement("i"); fill.style.width = (active.length ? Math.round(done / active.length * 100) : 0) + "%"; bar.append(fill);
+    box.append(sum, bar);
+    const due = b.list.filter((x) => x.reviewDue && x.reviewDue <= todayStr());
+    if (due.length) {
+      const n = document.createElement("div"); n.className = "sbtns";
+      due.forEach((x) => { const btn = document.createElement("button"); btn.className = "btn primary"; btn.textContent = "Review due: " + x.title;
+        btn.onclick = () => askFromBooks("Give me a quick review on " + x.title + ", book #" + x.id + "."); n.append(btn); });
+      box.append(n);
+    }
+    STAGES.forEach((st, i) => {
+      const items = b.list.filter((x) => x.stage === i); if (!items.length) return;
+      const h = document.createElement("div"); h.className = "bstage"; h.textContent = (i < 5 ? "Stage " + (i + 1) + " · " : "") + st; box.append(h);
+      items.forEach((x) => {
+        const c = document.createElement("div"); c.className = "bk " + x.status;
+        const info = document.createElement("div");
+        const t = document.createElement("div"); t.className = "t"; t.textContent = x.title;
+        const a = document.createElement("div"); a.className = "a"; a.textContent = x.author + (x.progress ? " · " + x.progress : "") + (x.check ? " · check " + x.check.c + "/" + x.check.t : "");
+        info.append(t, a);
+        const chip = document.createElement("span"); chip.className = "chip";
+        chip.textContent = { next: "Up next", reading: "Reading", done: "Finished " + (x.finished || ""), skipped: "Skipped" }[x.status] || x.status;
+        const acts = document.createElement("div"); acts.className = "acts";
+        const mk = (label, fn, primary) => { const btn = document.createElement("button"); btn.className = "btn" + (primary ? " primary" : ""); btn.textContent = label; btn.onclick = fn; acts.append(btn); };
+        if (x.status === "next" || x.status === "skipped") mk("Start", () => { applyBookCommand("BOOK_START", String(x.id)); });
+        if (x.status === "reading") {
+          mk("Quiz me", () => askFromBooks("Quiz me on what I've read so far in " + x.title + ", book #" + x.id + "."), true);
+          mk("Finished", () => { applyBookCommand("BOOK_DONE", String(x.id)); askFromBooks("I finished " + x.title + ", book #" + x.id + ". Give me my understanding check."); });
+        }
+        if (x.status === "done") {
+          mk("Understanding check", () => askFromBooks("Give me an understanding check on " + x.title + ", book #" + x.id + "."));
+          mk("Teach-back", () => askFromBooks("Let me teach back the main principles of " + x.title + ", book #" + x.id + ". Ask me to explain them."));
+        }
+        if (x.status === "next") mk("Skip", () => applyBookCommand("BOOK_SKIP", String(x.id)));
+        c.append(info, chip, acts); box.append(c);
+      });
+    });
+    const goal = document.createElement("div"); goal.className = "addrow";
+    const gi = document.createElement("input"); gi.type = "text"; gi.inputMode = "numeric"; gi.placeholder = "Yearly book goal (now " + b.goal + ")";
+    const gb = document.createElement("button"); gb.className = "btn"; gb.textContent = "Set goal";
+    gb.onclick = () => { const v = Math.round(Number(gi.value)); if (v > 0) { b.goal = v; save(); renderBooks(); } };
+    const add = document.createElement("div"); add.className = "addrow";
+    const ai = document.createElement("input"); ai.type = "text"; ai.placeholder = "Add a book: Title, Author";
+    const ab = document.createElement("button"); ab.className = "btn primary"; ab.textContent = "Add";
+    ab.onclick = () => { const [title, ...rest] = ai.value.split(","); if (title && title.trim()) { applyBookCommand("BOOK_ADD", title.trim() + "|" + rest.join(",").trim()); ai.value = ""; } };
+    goal.append(gi, gb); add.append(ai, ab);
+    const tip = document.createElement("small"); tip.style.color = "var(--muted)";
+    tip.textContent = "Tell DOT when you start, reach a chapter, or finish a book. She checks your understanding, saves key principles to your Empire Playbook, and brings them back for review in 2 weeks and again later.";
+    box.append(add, goal, tip);
+    // Empire Playbook
+    const pb = $("bkPlay"); pb.innerHTML = "";
+    if (!b.playbook.length) { const p = document.createElement("p"); p.className = "empty-note"; p.textContent = "Your Empire Playbook fills up as you finish understanding checks. Each principle is saved in your own words."; pb.append(p); }
+    const byBook = {}; b.playbook.forEach((p) => (byBook[p.book] = byBook[p.book] || []).push(p));
+    Object.keys(byBook).forEach((title) => {
+      const h = document.createElement("div"); h.className = "bstage"; h.textContent = title; pb.append(h);
+      byBook[title].forEach((p) => { const d = document.createElement("div"); d.className = "pb"; d.textContent = p.text; const sm = document.createElement("small"); sm.textContent = p.date; d.append(sm); pb.append(d); });
+    });
+    if (b.playbook.length) {
+      const cp = document.createElement("button"); cp.className = "btn"; cp.textContent = "Copy playbook";
+      cp.onclick = async () => { const txt = "EMPIRE PLAYBOOK\n\n" + Object.keys(byBook).map((t) => t + "\n" + byBook[t].map((p) => "- " + p.text).join("\n")).join("\n\n");
+        try { await navigator.clipboard.writeText(txt); cp.textContent = "Copied"; } catch (e) { cp.textContent = "Copy failed"; } setTimeout(() => (cp.textContent = "Copy playbook"), 1800); };
+      pb.append(cp);
+    }
+  }
+  function askFromBooks(msg) { $("booksDlg").close(); unlockSpeech(); lastInputVoice = false; ask(msg); }
+
   // ---------- stock watchlist ----------
   const fmt$ = (n) => (Number(n) || 0).toLocaleString("en-US", { style: "currency", currency: "USD" });
   const symList = () => String(state.settings.watchlist || "").toUpperCase().split(/[,\s]+/).map((x) => x.replace(/[^A-Z0-9.]/g, "")).filter(Boolean);
@@ -1130,7 +1314,7 @@ Use MEMO only for things worth keeping long term. Never read the MEMO line aloud
       `BRIEFING
 When ${name} asks for a briefing, gather everything with your tools first: Helendale weather, his calendar for today if you have a calendar tool, silver prices with his stack, and the top three national news headlines from one web search.
 Then deliver one spoken rundown of about 170 words in this order:
-a short greeting suited to the time of day; the weather now, the high and low, and anything notable; today's schedule, or say his calendar is clear; silver in two sentences covering price and direction, buying window status, and stack progress; his to-do list in one sentence, naming overdue and due-today items and how many others are open; his Bible reading for today in one sentence, including whether he is behind, or on Sunday that it is a rest day; one market sentence from get_stocks for his watchlist, such as how many are up or down and the biggest mover, noting if the market is closed; three headlines in one sentence each; then close with one short question or suggestion.
+a short greeting suited to the time of day; the weather now, the high and low, and anything notable; today's schedule, or say his calendar is clear; silver in two sentences covering price and direction, buying window status, and stack progress; his to-do list in one sentence, naming overdue and due-today items and how many others are open; his Bible reading for today in one sentence, including whether he is behind, or on Sunday that it is a rest day; one market sentence from get_stocks for his watchlist, such as how many are up or down and the biggest mover, noting if the market is closed; if a book review is due, mention it in a few words; three headlines in one sentence each; then close with one short question or suggestion.
 Do not give the full silver report unless he asks for it, and do not state the clock time. If any source is unavailable, say so in a few words and continue with the rest.`,
 
       `SCRIPTURE AND SERMON PREP
@@ -1156,6 +1340,15 @@ When he says an episode is finished, add one final separate line in exactly this
       `TRANSLATOR MODE
 When ${name} asks to start translator mode, or to translate everything he says into a language, confirm in one short sentence and add one final separate line in exactly this form, naming the language in English: TRANSLATE_ON: Spanish
 Never read that line aloud. For a single phrase, such as "how do you say God bless you in Spanish," answer normally with the translation and one short pronunciation tip.`,
+
+      `WEALTH READING PATH
+${name} is building a family empire and wants a deep, working understanding of finance, banking, investing, and generational wealth. His reading path, by stage:
+${booksForPrompt()}
+Guiding him: recommend the next book in stage order, tied to his current goals (paying down debt, building his silver stack, index-fund investing, and starting a Family Bank). You may suggest additions or swaps with one sentence on why; add one only when he agrees.
+Tracking, one final line per change: BOOK_START: id; BOOK_PROGRESS: id | where he is, such as chapter 5; BOOK_DONE: id; BOOK_SKIP: id; BOOK_REMOVE: id; BOOK_ADD: title | author | stage name (Foundations, Banking and money, Investing, Building and protecting wealth, Family legacy, or Other books).
+Understanding checks, when he finishes a book or asks to be quizzed: ask four questions, one at a time, waiting for each answer: two on the book's core principles, one applying a principle to his own situation, and one teach-back where he explains an idea in plain words as he would to his grandchildren. Base questions only on the book's well-known central ideas; if you are not sure a detail is in the book, do not ask about it. After each answer, say what he got right, gently correct what he missed, and add one sentence connecting it to his goals. Score the first two. Then add one final line BOOK_CHECK: id | correct | 2 | topic to review, and one to three lines PLAYBOOK: id | a key principle in his own words or close to them.
+Reviews: when a review is due, or he asks, ask two quick questions on the principles to review, then add BOOK_REVIEWED: id.
+Quizzes on a book in progress cover only what he says he has read. Never read these control lines aloud or mention them. This is education, not financial advice.`,
 
       `STOCK WATCHLIST
 His watchlist: ${s.watchlist || "none"}. ${Object.keys(s.shares || {}).length ? "He has entered share counts for: " + Object.keys(s.shares).join(", ") + "." : "He has not entered share counts."}
@@ -1280,9 +1473,10 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
       if (stackNew !== null && !isNaN(stackNew)) state.settings.stackOz = stackNew;
       recordSilver(data.metals);
       const listChanges = [];
-      reply = reply.replace(/^\s*(TODO_ADD|TODO_DONE|TODO_UNDONE|TODO_DELETE|NOTE_DELETE|NOTE|DEBT_ADD|DEBT_PAY|DEBT_BALANCE|DEBT_TERMS|DEBT_PLAN|DEBT_DELETE|STUDY_PLAN|STUDY_THEME|STUDY_READ|STUDY_SCORE):\s*(.+)$/gim, (m, cmd, arg) => {
+      reply = reply.replace(/^\s*(TODO_ADD|TODO_DONE|TODO_UNDONE|TODO_DELETE|NOTE_DELETE|NOTE|DEBT_ADD|DEBT_PAY|DEBT_BALANCE|DEBT_TERMS|DEBT_PLAN|DEBT_DELETE|STUDY_PLAN|STUDY_THEME|STUDY_READ|STUDY_SCORE|BOOK_ADD|BOOK_START|BOOK_PROGRESS|BOOK_DONE|BOOK_SKIP|BOOK_REMOVE|BOOK_CHECK|BOOK_REVIEWED|PLAYBOOK):\s*(.+)$/gim, (m, cmd, arg) => {
         const C = cmd.toUpperCase();
-        const msg = C.startsWith("DEBT_") ? applyDebtCommand(C, arg.trim()) : C.startsWith("STUDY_") ? applyStudyCommand(C, arg.trim()) : applyListCommand(C, arg.trim());
+        const msg = C.startsWith("DEBT_") ? applyDebtCommand(C, arg.trim()) : C.startsWith("STUDY_") ? applyStudyCommand(C, arg.trim())
+          : (C.startsWith("BOOK_") || C === "PLAYBOOK") ? applyBookCommand(C, arg.trim()) : applyListCommand(C, arg.trim());
         if (msg) listChanges.push(msg);
         return "";
       }).trim() || "Done.";
@@ -1792,6 +1986,14 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
   $("briefBtn").onclick = runBriefing;
   $("trThem").onclick = () => toggleListening(true);
   $("trExit").onclick = () => { state.tr.on = false; save(); renderTrBar(); note("Translator mode off."); };
+  const booksDlg = $("booksDlg");
+  const showBkTab = (play) => { $("bkPath").style.display = play ? "none" : "grid"; $("bkPlay").style.display = play ? "grid" : "none";
+    $("bkTabPath").className = "btn" + (play ? "" : " primary"); $("bkTabPlay").className = "btn" + (play ? " primary" : ""); };
+  $("booksBtn").onclick = () => { renderBooks(); showBkTab(false); booksDlg.showModal(); };
+  $("bkTabPath").onclick = () => showBkTab(false);
+  $("bkTabPlay").onclick = () => showBkTab(true);
+  $("bkClose").onclick = () => booksDlg.close();
+  booksDlg.addEventListener("click", (e) => { if (e.target === booksDlg) booksDlg.close(); });
   const stockDlg = $("stockDlg");
   $("stockBtn").onclick = () => { renderStocks(); stockDlg.showModal(); if (state.settings.workerUrl) loadQuotes(); };
   $("stkClose").onclick = () => stockDlg.close();
