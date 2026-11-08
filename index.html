@@ -93,6 +93,13 @@
   }
   .icon-btn:hover { color: var(--text); border-color: var(--muted); }
   .brief-btn { width: auto; border-radius: 22px; padding: 0 14px 0 12px; gap: 6px; display: flex; align-items: center; color: var(--amber); border-color: color-mix(in srgb, var(--amber) 45%, var(--line)); font-weight: 500; }
+  .rtimer { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 14px; border: 1px solid var(--amber); border-radius: 22px;
+    background: color-mix(in srgb, var(--amber) 12%, var(--panel)); box-shadow: 0 0 18px color-mix(in srgb, var(--amber) 30%, transparent); }
+  .rtimer[hidden] { display: none; }
+  .rtimer span { font: 600 1rem var(--display); color: var(--amber); font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+  .rtimer .btn { padding: 4px 10px; font-size: .8rem; }
+  .tbox { border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; gap: 10px; background: color-mix(in srgb, var(--bg) 70%, transparent); }
+  .tbox .sbtns .btn { min-width: 64px; }
   .bstage { font: 600 .82rem var(--display); letter-spacing: .08em; color: var(--amber); margin: 6px 0 2px; text-transform: uppercase; }
   .bk { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--bg) 70%, transparent); }
   .bk.reading { border-color: var(--amber); }
@@ -353,6 +360,11 @@
       </div>
       <p class="status" id="status" aria-live="polite">Standing by</p>
       <p class="live" id="live"></p>
+      <div class="rtimer" id="rTimer" hidden>
+        <span id="rTimerText">📖 Reading 30:00</span>
+        <button class="btn" id="rTimerAdd">+5 min</button>
+        <button class="btn" id="rTimerStop">Stop</button>
+      </div>
     </section>
     <section class="log" id="log" aria-live="polite"></section>
   </main>
@@ -992,6 +1004,7 @@
     }).filter(Boolean).join("\n");
     return lines + "\nYearly goal: " + b.goal + " books; finished this year: " + doneYr + "." +
       (due.length ? "\nReview due now for: " + due.map((x) => "#" + x.id + " " + x.title + (x.review ? " (focus: " + x.review + ")" : "")).join("; ") + "." : "") +
+      "\n" + timerForPrompt() +
       "\nEmpire Playbook principles saved: " + b.playbook.length + (b.playbook.length ? ". Most recent: " + b.playbook.slice(-5).map((p) => p.text).join(" | ") : "") + ".";
   }
   function applyBookCommand(cmd, arg) {
@@ -1047,6 +1060,25 @@
     });
     const bar = document.createElement("div"); bar.className = "bar"; const fill = document.createElement("i"); fill.style.width = (active.length ? Math.round(done / active.length * 100) : 0) + "%"; bar.append(fill);
     box.append(sum, bar);
+    const tb = document.createElement("div"); tb.className = "tbox";
+    const st = readingStats();
+    const th = document.createElement("strong"); th.textContent = "Reading timer"; th.style.fontFamily = "var(--display)";
+    const ts = document.createElement("small"); ts.style.color = "var(--muted)";
+    ts.textContent = "Today " + fmtMin(st.todayMin) + " · Past 7 days " + fmtMin(st.week) + (st.streak ? " · Streak " + st.streak + " day" + (st.streak === 1 ? "" : "s") : "");
+    const tbtns = document.createElement("div"); tbtns.className = "sbtns";
+    if (state.timer) {
+      const stopB = document.createElement("button"); stopB.className = "btn primary"; stopB.textContent = "Stop timer (" + mmss(state.timer.end - Date.now()) + " left)";
+      stopB.onclick = () => { const r = stopTimer(false); if (r) note("Reading timer stopped: " + mins(r.mins) + " logged" + (r.bk ? " for " + r.bk.title : "") + "."); };
+      tbtns.append(stopB);
+    } else {
+      [15, 30, 45, 60].forEach((m) => { const btn = document.createElement("button"); btn.className = "btn" + (m === 30 ? " primary" : ""); btn.textContent = m + " min";
+        btn.onclick = () => { unlockChime(); unlockSpeech(); note(startTimer(m)); $("booksDlg").close(); }; tbtns.append(btn); });
+      const ci = document.createElement("input"); ci.type = "text"; ci.inputMode = "numeric"; ci.placeholder = "Other";
+      ci.style.cssText = "width:80px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px";
+      ci.onkeydown = (e) => { if (e.key === "Enter" && Number(ci.value) > 0) { unlockChime(); unlockSpeech(); note(startTimer(ci.value)); $("booksDlg").close(); } };
+      tbtns.append(ci);
+    }
+    tb.append(th, ts, tbtns); box.append(tb);
     const due = b.list.filter((x) => x.reviewDue && x.reviewDue <= todayStr());
     if (due.length) {
       const n = document.createElement("div"); n.className = "sbtns";
@@ -1061,7 +1093,7 @@
         const c = document.createElement("div"); c.className = "bk " + x.status;
         const info = document.createElement("div");
         const t = document.createElement("div"); t.className = "t"; t.textContent = x.title;
-        const a = document.createElement("div"); a.className = "a"; a.textContent = x.author + (x.progress ? " · " + x.progress : "") + (x.check ? " · check " + x.check.c + "/" + x.check.t : "");
+        const a = document.createElement("div"); a.className = "a"; a.textContent = x.author + (x.progress ? " · " + x.progress : "") + (x.minutes ? " · " + fmtMin(x.minutes) + " read" : "") + (x.check ? " · check " + x.check.c + "/" + x.check.t : "");
         info.append(t, a);
         const chip = document.createElement("span"); chip.className = "chip";
         chip.textContent = { next: "Up next", reading: "Reading", done: "Finished " + (x.finished || ""), skipped: "Skipped" }[x.status] || x.status;
@@ -1107,6 +1139,92 @@
       pb.append(cp);
     }
   }
+  // ---------- reading timer ----------
+  // Alarm tone made in code and played through the system media player (works in Silent mode).
+  const chimeEl = new Audio(); chimeEl.setAttribute("playsinline", "");
+  function chimeBlob() {
+    const rate = 22050, notes = [[880, 0], [1108.7, 0.28], [1318.5, 0.56], [1760, 0.84]], len = Math.floor(rate * 1.9), out = new DataView(new ArrayBuffer(44 + len * 2));
+    const w = (o, str) => { for (let i = 0; i < str.length; i++) out.setUint8(o + i, str.charCodeAt(i)); };
+    w(0, "RIFF"); out.setUint32(4, 36 + len * 2, true); w(8, "WAVE"); w(12, "fmt "); out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 1, true);
+    out.setUint32(24, rate, true); out.setUint32(28, rate * 2, true); out.setUint16(32, 2, true); out.setUint16(34, 16, true); w(36, "data"); out.setUint32(40, len * 2, true);
+    for (let i = 0; i < len; i++) {
+      const t = i / rate; let v = 0;
+      for (const [f, st] of notes) { const dt = t - st; if (dt >= 0) v += Math.sin(2 * Math.PI * f * dt) * Math.exp(-dt * 3.2) * 0.22; }
+      out.setInt16(44 + i * 2, Math.max(-1, Math.min(1, v)) * 0x7fff, true);
+    }
+    return URL.createObjectURL(new Blob([out], { type: "audio/wav" }));
+  }
+  const CHIME = chimeBlob();
+  let chimeUnlocked = false, tick = 0, wakeLock = null;
+  function unlockChime() { if (chimeUnlocked) return; try { chimeEl.src = CHIME; chimeEl.volume = 0; const p = chimeEl.play(); if (p) p.then(() => { chimeEl.pause(); chimeEl.currentTime = 0; chimeEl.volume = 1; chimeUnlocked = true; }).catch(() => {}); } catch (e) {} }
+  async function keepAwake(on) {
+    try {
+      if (on && "wakeLock" in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release", () => (wakeLock = null)); }
+      if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
+    } catch (e) {}
+  }
+  const mmss = (ms) => { const t = Math.max(0, Math.round(ms / 1000)); return Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0"); };
+  const mins = (n) => n + (n === 1 ? " minute" : " minutes");
+  const fmtMin = (m) => (m >= 60 ? Math.floor(m / 60) + "h " + (m % 60) + "m" : m + " min");
+  function readingStats() {
+    const b = booksState(), log = b.log || [], today = todayStr();
+    const sumSince = (days) => log.filter((x) => x.date >= ymd(new Date(Date.now() - days * 86400000))).reduce((a, x) => a + x.minutes, 0);
+    const todayMin = log.filter((x) => x.date === today).reduce((a, x) => a + x.minutes, 0);
+    let streak = 0; const d = new Date(); if (!log.some((x) => x.date === today)) d.setDate(d.getDate() - 1);
+    while (log.some((x) => x.date === ymd(d))) { streak++; d.setDate(d.getDate() - 1); }
+    return { todayMin, week: sumSince(6), streak };
+  }
+  function startTimer(minutes, bookArg) {
+    const b = booksState(), m = Math.max(1, Math.min(240, Math.round(Number(minutes) || 30)));
+    const bk = (bookArg && findBk(bookArg)) || b.list.find((x) => x.status === "reading") || null;
+    if (bk && bk.status === "next") { bk.status = "reading"; bk.started = todayStr(); }
+    state.timer = { start: Date.now(), end: Date.now() + m * 60000, minutes: m, bookId: bk ? bk.id : null };
+    save(); keepAwake(true); runTimer(); renderBooks();
+    return "Reading timer started: " + mins(m) + (bk ? " on " + bk.title : "");
+  }
+  function logReading(minutes, bookId) {
+    const b = booksState(); b.log = b.log || [];
+    if (minutes < 1) return;
+    b.log.push({ date: todayStr(), minutes, bookId });
+    const bk = b.list.find((x) => x.id === bookId); if (bk) bk.minutes = (bk.minutes || 0) + minutes;
+    if (b.log.length > 800) b.log = b.log.slice(-800);
+  }
+  function stopTimer(finished) {
+    const t = state.timer; if (!t) return null;
+    const mins = finished ? t.minutes : Math.floor((Date.now() - t.start) / 60000);
+    logReading(mins, t.bookId); state.timer = null; save(); keepAwake(false);
+    clearInterval(tick); $("rTimer").hidden = true; renderBooks();
+    const bk = booksState().list.find((x) => x.id === t.bookId);
+    return { mins, bk };
+  }
+  function timerDone() {
+    const r = stopTimer(true); if (!r) return;
+    const st = readingStats(), name = state.settings.callsign || "Floyd";
+    try { chimeEl.src = CHIME; chimeEl.currentTime = 0; chimeEl.volume = 1; chimeEl.play().catch(() => {}); } catch (e) {}
+    note("⏰ Reading timer done: " + mins(r.mins) + (r.bk ? " in " + r.bk.title : "") + ". Today: " + fmtMin(st.todayMin) + ".");
+    const msg = "Time's up, " + name + ". That's " + mins(r.mins) + " of reading" + (r.bk ? " in " + r.bk.title : "") + (st.todayMin > r.mins ? ", and " + mins(st.todayMin) + " today" : "") + ". " +
+      (st.streak > 1 ? "Your reading streak is " + st.streak + " days. " : "") + "Where did you stop?";
+    setTimeout(() => speak(msg, { autoSpeak: true }), 1900);
+  }
+  function runTimer() {
+    clearInterval(tick);
+    const upd = () => {
+      const t = state.timer; if (!t) { $("rTimer").hidden = true; clearInterval(tick); return; }
+      const left = t.end - Date.now();
+      if (left <= 0) { timerDone(); return; }
+      $("rTimer").hidden = false;
+      const bk = booksState().list.find((x) => x.id === t.bookId);
+      $("rTimerText").textContent = "📖 " + mmss(left) + (bk ? " · " + (bk.title.length > 22 ? bk.title.slice(0, 21) + "…" : bk.title) : "");
+    };
+    upd(); tick = setInterval(upd, 1000);
+  }
+  function timerForPrompt() {
+    const t = state.timer, st = readingStats();
+    const run = t ? "A reading timer is running: " + mmss(t.end - Date.now()) + " left of " + t.minutes + " minutes." : "No reading timer is running.";
+    return run + " Reading time today: " + st.todayMin + " minutes; past seven days: " + st.week + " minutes; streak: " + st.streak + " day" + (st.streak === 1 ? "" : "s") + ".";
+  }
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && state.timer) { if (state.timer.end <= Date.now()) timerDone(); else { keepAwake(true); runTimer(); } } });
+
   function askFromBooks(msg) { $("booksDlg").close(); unlockSpeech(); lastInputVoice = false; ask(msg); }
 
   // ---------- stock watchlist ----------
@@ -1348,6 +1466,7 @@ Guiding him: recommend the next book in stage order, tied to his current goals (
 Tracking, one final line per change: BOOK_START: id; BOOK_PROGRESS: id | where he is, such as chapter 5; BOOK_DONE: id; BOOK_SKIP: id; BOOK_REMOVE: id; BOOK_ADD: title | author | stage name (Foundations, Banking and money, Investing, Building and protecting wealth, Family legacy, or Other books).
 Understanding checks, when he finishes a book or asks to be quizzed: ask four questions, one at a time, waiting for each answer: two on the book's core principles, one applying a principle to his own situation, and one teach-back where he explains an idea in plain words as he would to his grandchildren. Base questions only on the book's well-known central ideas; if you are not sure a detail is in the book, do not ask about it. After each answer, say what he got right, gently correct what he missed, and add one sentence connecting it to his goals. Score the first two. Then add one final line BOOK_CHECK: id | correct | 2 | topic to review, and one to three lines PLAYBOOK: id | a key principle in his own words or close to them.
 Reviews: when a review is due, or he asks, ask two quick questions on the principles to review, then add BOOK_REVIEWED: id.
+Reading timer: when he asks to set a reading timer, add one final line TIMER_START: minutes | book id (book optional; the book he is reading is used by default). To stop it early, TIMER_STOP: now. To add time, TIMER_ADD: minutes. When the timer ends, the app sounds a chime and announces it, and the minutes are logged automatically. If he asks how much time is left, use the timer status above.
 Quizzes on a book in progress cover only what he says he has read. Never read these control lines aloud or mention them. This is education, not financial advice.`,
 
       `STOCK WATCHLIST
@@ -1473,8 +1592,16 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
       if (stackNew !== null && !isNaN(stackNew)) state.settings.stackOz = stackNew;
       recordSilver(data.metals);
       const listChanges = [];
-      reply = reply.replace(/^\s*(TODO_ADD|TODO_DONE|TODO_UNDONE|TODO_DELETE|NOTE_DELETE|NOTE|DEBT_ADD|DEBT_PAY|DEBT_BALANCE|DEBT_TERMS|DEBT_PLAN|DEBT_DELETE|STUDY_PLAN|STUDY_THEME|STUDY_READ|STUDY_SCORE|BOOK_ADD|BOOK_START|BOOK_PROGRESS|BOOK_DONE|BOOK_SKIP|BOOK_REMOVE|BOOK_CHECK|BOOK_REVIEWED|PLAYBOOK):\s*(.+)$/gim, (m, cmd, arg) => {
+      reply = reply.replace(/^\s*(TODO_ADD|TODO_DONE|TODO_UNDONE|TODO_DELETE|NOTE_DELETE|NOTE|DEBT_ADD|DEBT_PAY|DEBT_BALANCE|DEBT_TERMS|DEBT_PLAN|DEBT_DELETE|STUDY_PLAN|STUDY_THEME|STUDY_READ|STUDY_SCORE|BOOK_ADD|BOOK_START|BOOK_PROGRESS|BOOK_DONE|BOOK_SKIP|BOOK_REMOVE|BOOK_CHECK|BOOK_REVIEWED|PLAYBOOK|TIMER_START|TIMER_STOP|TIMER_ADD):\s*(.*)$/gim, (m, cmd, arg) => {
         const C = cmd.toUpperCase();
+        if (C.startsWith("TIMER_")) {
+          let tm = null;
+          if (C === "TIMER_START") { const [mn, bk] = arg.split("|").map((x) => x.trim()); tm = startTimer(mn, bk); }
+          else if (C === "TIMER_STOP") { const r = stopTimer(false); tm = r ? "Reading timer stopped: " + mins(r.mins) + " logged" : null; }
+          else if (C === "TIMER_ADD" && state.timer) { const mn = Math.max(1, Math.round(Number(arg) || 5)); state.timer.end += mn * 60000; state.timer.minutes += mn; save(); runTimer(); tm = "Added " + mn + " minutes to the reading timer"; }
+          if (tm) listChanges.push(tm);
+          return "";
+        }
         const msg = C.startsWith("DEBT_") ? applyDebtCommand(C, arg.trim()) : C.startsWith("STUDY_") ? applyStudyCommand(C, arg.trim())
           : (C.startsWith("BOOK_") || C === "PLAYBOOK") ? applyBookCommand(C, arg.trim()) : applyListCommand(C, arg.trim());
         if (msg) listChanges.push(msg);
@@ -1570,7 +1697,7 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
   }
   let pendingAudio = null;
   function gestureWake() {
-    unlockAudio(); unlockEl();
+    unlockAudio(); unlockEl(); try { unlockChime(); } catch (e) {}
     if (pendingAudio) {
       const p = pendingAudio; pendingAudio = null; voiceStatus("");
       setTimeout(() => playVoice(p.bytes, p.s), 60);
@@ -1986,6 +2113,8 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
   $("briefBtn").onclick = runBriefing;
   $("trThem").onclick = () => toggleListening(true);
   $("trExit").onclick = () => { state.tr.on = false; save(); renderTrBar(); note("Translator mode off."); };
+  $("rTimerStop").onclick = () => { const r = stopTimer(false); if (r) note("Reading timer stopped: " + mins(r.mins) + " logged" + (r.bk ? " for " + r.bk.title : "") + "."); };
+  $("rTimerAdd").onclick = () => { if (state.timer) { state.timer.end += 5 * 60000; state.timer.minutes += 5; save(); runTimer(); } };
   const booksDlg = $("booksDlg");
   const showBkTab = (play) => { $("bkPath").style.display = play ? "none" : "grid"; $("bkPlay").style.display = play ? "grid" : "none";
     $("bkTabPath").className = "btn" + (play ? "" : " primary"); $("bkTabPlay").className = "btn" + (play ? " primary" : ""); };
@@ -2051,6 +2180,7 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
 
   applyPalette(state.settings.palette);
   renderList();
+  if (state.timer) { if (state.timer.end <= Date.now()) setTimeout(timerDone, 800); else { runTimer(); keepAwake(true); } }
   render();
   setMode("idle");
   if (!state.settings.workerUrl) openSettings();
