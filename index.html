@@ -489,6 +489,35 @@
         <label for="sName">What DOT calls you</label>
         <input id="sName" type="text">
       </div>
+      <h2 style="font-size:1.05rem;margin-top:6px">Personality</h2>
+      <div class="sbtns" id="pPresets">
+        <button class="btn" data-p="classic">Classic DOT</button>
+        <button class="btn" data-p="friendly">Friendly</button>
+        <button class="btn" data-p="business">All business</button>
+      </div>
+      <div class="field">
+        <label for="sTone">Tone: <span id="sToneLbl"></span></label>
+        <input id="sTone" type="range" min="1" max="5" step="1">
+        <small style="display:flex;justify-content:space-between"><span>Formal</span><span>Warm</span></small>
+      </div>
+      <div class="field">
+        <label for="sHumor">Humor: <span id="sHumorLbl"></span></label>
+        <input id="sHumor" type="range" min="0" max="3" step="1">
+        <small style="display:flex;justify-content:space-between"><span>None</span><span>Playful</span></small>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="sLength">Answer length</label>
+          <select id="sLength"><option value="0">Brief</option><option value="1">Standard</option><option value="2">Detailed</option></select>
+        </div>
+        <div class="field">
+          <label for="sFollow">Follow-up questions</label>
+          <select id="sFollow"><option value="0">Rarely</option><option value="1">Sometimes</option><option value="2">Often</option></select>
+        </div>
+      </div>
+      <label class="check"><input id="sMission" type="checkbox"> Military style (objective, assessment, recommendation)</label>
+      <label class="check"><input id="sSignoff" type="checkbox"> Sign off with “Standing by” now and then</label>
+      <button class="btn" id="pTry" style="justify-self:start">Hear how she sounds</button>
       <div class="field">
         <label for="sPalette">Color theme</label>
         <select id="sPalette">
@@ -571,7 +600,8 @@
 <script>
 (() => {
   const KEY = "dot.v1";
-  const DEFAULTS = { workerUrl: "", accessCode: "", callsign: "Floyd", voiceURI: "", rate: 1, pitch: 0.9, autoSpeak: true, notes: "", engine: "cloud", fx: true, convo: false, stackOz: 32, stackGoal: 200, buyWindow: "1-8", premium: 5, dailyReport: true, palette: "holo", bible: "kjv", episodes: "Robert Smalls\nRobert Emmett Fletcher Jr.\nKate Warne\nBilly Mitchell\nEugene Bullard", watchlist: "BRK.B, VOO, VTI, QQQ, SCHD, NVDA, TSLA, SPCX", shares: {} };
+  const DEFAULTS = { workerUrl: "", accessCode: "", callsign: "Floyd", voiceURI: "", rate: 1, pitch: 0.9, autoSpeak: true, notes: "", engine: "cloud", fx: true, convo: false, stackOz: 32, stackGoal: 200, buyWindow: "1-8", premium: 5, dailyReport: true, palette: "holo", bible: "kjv", episodes: "Robert Smalls\nRobert Emmett Fletcher Jr.\nKate Warne\nBilly Mitchell\nEugene Bullard", watchlist: "BRK.B, VOO, VTI, QQQ, SCHD, NVDA, TSLA, SPCX", shares: {},
+    tone: 2, humor: 1, length: 1, followups: 1, mission: true, signoff: true };
   const $ = (id) => document.getElementById(id);
   const logEl = $("log"), statusEl = $("status"), liveEl = $("live");
 
@@ -770,6 +800,40 @@
       c.append(top, bar, meta, act); list.append(c);
     });
   }
+
+  // ---------- personality ----------
+  const TONES = ["", "Formal", "Mostly formal", "Balanced", "Warm", "Very warm"];
+  const HUMORS = ["None", "Dry, rare", "Light", "Playful"];
+  function personalityText(s, name) {
+    const tone = s.tone ?? 2, humor = s.humor ?? 1;
+    const toneLine = [
+      "",
+      "You are formal, precise, and reserved, in the manner of a seasoned military staff officer who happens to be an AI. Short, measured sentences. No filler, no exclamation points, no gushing, no flattery, no therapy-speak.",
+      "You are calm, precise, and mostly formal, in the manner of a seasoned military staff officer who happens to be an AI, with quiet loyalty underneath. Short, measured sentences. No filler, no gushing, no flattery, no therapy-speak.",
+      "You are calm and precise but personable: professional, clear, and friendly in a respectful way. Plain sentences, no filler, no gushing or flattery.",
+      "You are warm, encouraging, and personable, like a trusted aide who genuinely enjoys helping him, while staying clear and precise. Natural, friendly sentences. No gushing or flattery, and no therapy-speak.",
+      "You are very warm and encouraging, like a devoted, cheerful aide, while staying clear, honest, and precise. Friendly, conversational sentences. Warmth never replaces candor, and you never flatter."
+    ][tone];
+    const humorLine = [
+      "Do not use humor; stay entirely serious.",
+      "You have a dry, understated wit. Use it rarely: at most one light remark in a reply, only when the moment allows.",
+      "You have a light sense of humor. A brief, good-natured remark now and then is welcome when the moment allows.",
+      "You are playful and enjoy friendly banter and the occasional joke, while keeping answers useful."
+    ][humor] + (humor ? " Never joke about serious matters such as grief, health, money troubles, or faith." : "");
+    return "PERSONALITY\n" + toneLine + "\n" + humorLine +
+      "\nYou care about " + name + "'s success and wellbeing and show it through attentiveness and candor. Your personality never changes the accuracy rules below." +
+      (s.mission ? "\nYou use mission language naturally: objective, assessment, recommendation. For larger questions, structure the answer as the objective, your assessment, and your recommendation. For simple questions, just answer." : "\nSpeak in everyday language rather than military terms.") +
+      "\nAddress the user as " + name + "." + (s.signoff ? " Occasionally, not every time, close with a short line such as \"Standing by.\"" : " Do not use sign-off phrases.");
+  }
+  function persLabels() {
+    $("sToneLbl").textContent = TONES[Number($("sTone").value)] || "";
+    $("sHumorLbl").textContent = HUMORS[Number($("sHumor").value)] || "";
+  }
+  const PRESETS = {
+    classic: { tone: 2, humor: 1, length: 1, followups: 1, mission: true, signoff: true },
+    friendly: { tone: 4, humor: 2, length: 1, followups: 2, mission: false, signoff: false },
+    business: { tone: 1, humor: 0, length: 0, followups: 0, mission: true, signoff: false }
+  };
 
   // ---------- translator mode ----------
   const LANGS = { spanish: "es-MX", french: "fr-FR", german: "de-DE", portuguese: "pt-BR", italian: "it-IT", korean: "ko-KR",
@@ -1399,12 +1463,7 @@
     return [
       `You are DOT, a personal support intelligence assigned to ${name}. You run on his own system, built by him.`,
 
-      `PERSONALITY
-You are calm, precise, formal, and quietly loyal, in the manner of a seasoned military staff officer who happens to be an AI. You speak in short, measured sentences. No filler, no exclamation points, no gushing, no flattery, no therapy-speak.
-You have a dry, understated wit. Use it sparingly: at most one light remark in a reply, and only when the moment allows. Never joke about serious matters.
-You care about ${name}'s success and wellbeing, and you show it through attentiveness and candor, not sentiment.
-You use mission language naturally: objective, assessment, recommendation, standing by. For larger questions, structure the answer as the objective, your assessment, and your recommendation. For simple questions, just answer.
-Address the user as ${name}. Occasionally, not every time, close with a short line such as "Standing by."`,
+      personalityText(s, name),
 
       `ACCURACY RULES, which outrank everything else in these instructions
 ${name} wants accurate information only, never guesses, even good ones.
@@ -1419,7 +1478,7 @@ ${name} wants accurate information only, never guesses, even good ones.
 9. Being brief and saying "I do not know" is always better than being complete and wrong.`,
 
       `INTERACTION
-Be conversational and engaged, not just responsive. When it fits, end with one short, relevant follow-up question or offer a useful next step. Do this often but not on every reply, and never ask more than one question at a time.
+Be conversational and engaged, not just responsive. ${["Ask follow-up questions only when you truly need information to help him; otherwise just answer.", "When it fits, end with one short, relevant follow-up question or a useful next step, about every other reply.", "Often end with one short, relevant follow-up question or a useful next step to keep the conversation moving."][s.followups ?? 1]} Never ask more than one question at a time.
 Use what you know about ${name} from his standing information and this conversation to make answers personal and specific to him.
 If he seems to be thinking out loud or working through a decision, help him think: ask what outcome he wants, or name the key tradeoff.
 Keep any banter light and brief, then get back to the point.`,
@@ -1515,7 +1574,7 @@ Never read the STACK line aloud or mention it; the system removes it and updates
       `Honesty outranks agreement. If a plan carries risk, state the risk plainly and respectfully, then help.`,
 
       `FORMAT
-Your replies are spoken aloud. Keep most answers to one to four sentences unless ${name} asks for more detail. Never use markdown, bullet points, headings, emoji, or web addresses. Write numbers, times, and abbreviations the way they should be spoken. The only exception is the outline block described under scripture and sermon prep, which is shown on screen and not read aloud.`,
+Your replies are spoken aloud. ${["Keep answers very short: one or two sentences unless he asks for more.", "Keep most answers to one to four sentences unless he asks for more detail.", "Give fuller answers, usually four to eight sentences with helpful context, while staying focused."][s.length ?? 1]} Never use markdown, bullet points, headings, emoji, or web addresses. Write numbers, times, and abbreviations the way they should be spoken. The only exception is the outline block described under scripture and sermon prep, which is shown on screen and not read aloud.`,
 
       `For reference only: the current local date and time is ${now}, Pacific time. Do not state the date or time unless ${name} asks for it or the task genuinely depends on it, such as scheduling. Never comment on or correct a time you gave earlier.`,
       s.notes ? `Standing information from ${name}:\n${s.notes}` : ""
@@ -2082,7 +2141,9 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
     $("sWorker").value = s.workerUrl; $("sCode").value = s.accessCode; $("sName").value = s.callsign;
     $("sRate").value = s.rate; $("sPitch").value = s.pitch; $("sSpeak").checked = s.autoSpeak; $("sNotes").value = s.notes;
     $("sEngine").value = s.engine; $("sFx").checked = s.fx; $("sConvo").checked = s.convo;
-    $("sOz").value = s.stackOz; $("sGoal").value = s.stackGoal; $("sWin").value = s.buyWindow; $("sPrem").value = s.premium; $("sDaily").checked = s.dailyReport; $("sPalette").value = s.palette; $("sBible").value = s.bible; $("sEpisodes").value = s.episodes || "";
+    $("sOz").value = s.stackOz; $("sGoal").value = s.stackGoal; $("sWin").value = s.buyWindow; $("sPrem").value = s.premium; $("sDaily").checked = s.dailyReport;
+    $("sTone").value = s.tone; $("sHumor").value = s.humor; $("sLength").value = s.length; $("sFollow").value = s.followups;
+    $("sMission").checked = s.mission; $("sSignoff").checked = s.signoff; persLabels(); $("sPalette").value = s.palette; $("sBible").value = s.bible; $("sEpisodes").value = s.episodes || "";
     loadVoices();
     if (!dlg.open) dlg.showModal();
   }
@@ -2104,12 +2165,24 @@ Your replies are spoken aloud. Keep most answers to one to four sentences unless
       buyWindow: $("sWin").value.trim(),
       premium: Number($("sPrem").value) || 0,
       dailyReport: $("sDaily").checked,
+      tone: Number($("sTone").value), humor: Number($("sHumor").value), length: Number($("sLength").value), followups: Number($("sFollow").value),
+      mission: $("sMission").checked, signoff: $("sSignoff").checked,
       palette: $("sPalette").value,
       bible: $("sBible").value,
       episodes: $("sEpisodes").value.trim()
     };
   }
   $("openSettings").onclick = openSettings;
+  $("sTone").oninput = persLabels; $("sHumor").oninput = persLabels;
+  $("pPresets").querySelectorAll("button").forEach((btn) => btn.onclick = () => {
+    const p = PRESETS[btn.dataset.p]; $("sTone").value = p.tone; $("sHumor").value = p.humor; $("sLength").value = p.length;
+    $("sFollow").value = p.followups; $("sMission").checked = p.mission; $("sSignoff").checked = p.signoff; persLabels();
+  });
+  $("pTry").onclick = () => {
+    state.settings = { ...state.settings, ...readForm() }; save(); dlg.close(); render();
+    unlockSpeech(); lastInputVoice = false;
+    ask("Personality check: in two or three sentences, tell me how you'll talk with me now.");
+  };
   $("briefBtn").onclick = runBriefing;
   $("trThem").onclick = () => toggleListening(true);
   $("trExit").onclick = () => { state.tr.on = false; save(); renderTrBar(); note("Translator mode off."); };
