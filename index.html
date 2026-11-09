@@ -228,6 +228,14 @@
   .trbar #trLabel { font: 600 .95rem var(--display); color: var(--amber); letter-spacing: .03em; }
   .trbar .btn { padding: 6px 12px; font-size: .85rem; }
   .typebox { flex: 1; display: flex; border: 1px solid var(--line); border-radius: 22px; background: var(--panel); overflow: hidden; }
+  .attbtn { background: transparent; border: 0; color: var(--amber); padding: 0 4px 0 12px; cursor: pointer; display: grid; place-items: center; }
+  .attchips { width: 100%; display: flex; flex-wrap: wrap; gap: 8px; }
+  .attchips[hidden] { display: none; }
+  .attchip { display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 4px; border: 1px solid var(--amber); border-radius: 10px; background: var(--panel); font-size: .82rem; max-width: 260px; }
+  .attchip img { width: 40px; height: 40px; object-fit: cover; border-radius: 6px; }
+  .attchip .pdf { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 6px; background: var(--bg); color: var(--amber); font: 600 .7rem var(--display); }
+  .attchip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .attchip button { background: transparent; border: 0; color: var(--muted); font-size: 1.1rem; cursor: pointer; }
   .typebox input { flex: 1; min-width: 0; background: transparent; border: 0; padding: 11px 16px; outline: none; }
   .typebox button { background: transparent; border: 0; padding: 0 16px; color: var(--amber); font-weight: 500; cursor: pointer; }
   .typebox:focus-within { border-color: var(--amber-dim); }
@@ -377,7 +385,12 @@
         <button class="btn" id="trExit">Exit translator</button>
       </span>
     </div>
+    <div class="attchips" id="attChips" hidden></div>
     <div class="typebox">
+      <button id="attBtn" class="attbtn" aria-label="Attach a photo or document" title="Attach a photo or document">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.4 11.1l-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8l8.5-8.5a3.7 3.7 0 0 1 5.2 5.2l-8.5 8.5a1.8 1.8 0 0 1-2.6-2.6l7.8-7.8"/></svg>
+      </button>
+      <input id="attFile" type="file" accept="image/*,application/pdf" multiple hidden>
       <input id="textIn" type="text" placeholder="Type to DOT" autocomplete="off" enterkeyhint="send" aria-label="Message to DOT">
       <button id="sendBtn">Send</button>
     </div>
@@ -493,6 +506,12 @@
       <label class="check"><input id="sSync" type="checkbox"> Keep this device in sync with my other devices</label>
       <small id="syncStatus" style="color:var(--muted)">Off on this device.</small>
       <button class="btn" id="syncNowBtn" style="justify-self:start">Sync now</button>
+      <div class="field">
+        <label for="bkSel">Restore from a backup</label>
+        <select id="bkSel"></select>
+        <small>DOT saves a copy on this device every 30 minutes of use and before syncing changes, plus a daily copy in your Cloudflare account. Restoring replaces your lists, debts, Bible plan, and reading path with that copy.</small>
+      </div>
+      <div class="sbtns"><button class="btn" id="bkLoad">Show cloud backups</button><button class="btn danger" id="bkRestore">Restore selected</button></div>
       <h2 style="font-size:1.05rem;margin-top:6px">Personality</h2>
       <div class="sbtns" id="pPresets">
         <button class="btn" data-p="classic">Classic DOT</button>
@@ -620,7 +639,23 @@
   }
   let state = load();
   function writeLocal() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
-  function save() { writeLocal(); try { scheduleSync(); } catch (e) {} }
+  // Automatic local backups: a snapshot every 30 minutes of use and before any sync overwrite (last 12 kept).
+  const BKEY = "dot.backups";
+  function loadBackups() { try { return JSON.parse(localStorage.getItem(BKEY)) || []; } catch (e) { return []; } }
+  function backupNow(reason) {
+    try {
+      const list = loadBackups();
+      const snap = { t: Date.now(), reason: reason || "auto", state: JSON.parse(JSON.stringify(state)) };
+      if (snap.state.history) snap.state.history = snap.state.history.slice(-40);
+      list.push(snap);
+      while (list.length > 12) list.shift();
+      localStorage.setItem(BKEY, JSON.stringify(list));
+    } catch (e) {
+      try { const list = loadBackups(); list.splice(0, Math.max(1, list.length - 4)); localStorage.setItem(BKEY, JSON.stringify(list)); } catch (err) {}
+    }
+  }
+  function maybeBackup() { const l = loadBackups(); if (!l.length || Date.now() - l[l.length - 1].t > 30 * 60000) backupNow("auto"); }
+  function save() { writeLocal(); try { maybeBackup(); } catch (e) {} try { scheduleSync(); } catch (e) {} }
 
   // ---------- to-do list & notes ----------
   const fmtDue = (d) => { const [y, m, dd] = d.split("-").map(Number); return new Date(y, m - 1, dd).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }); };
@@ -806,6 +841,46 @@
     });
   }
 
+  // ---------- photos and documents ----------
+  let pending = [];
+  function readAsDataURL(file) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); }); }
+  async function shrinkImage(file) {
+    const url = await readAsDataURL(file);
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+    const max = 1600, k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement("canvas"); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    const out = c.toDataURL("image/jpeg", 0.85);
+    return { media_type: "image/jpeg", data: out.split(",")[1], preview: out, name: file.name || "Photo" };
+  }
+  async function addFiles(files) {
+    for (const f of files) {
+      if (pending.length >= 5) { note("Up to 5 attachments at a time."); break; }
+      try {
+        if (f.type === "application/pdf") {
+          if (f.size > 20 * 1024 * 1024) { note("That PDF is over 20 MB. Try a smaller file or fewer pages."); continue; }
+          const url = await readAsDataURL(f);
+          pending.push({ media_type: "application/pdf", data: url.split(",")[1], name: f.name || "Document.pdf" });
+        } else if (/^image\//.test(f.type) || /\.(heic|heif)$/i.test(f.name || "")) {
+          pending.push(await shrinkImage(f));
+        } else { note("DOT can read photos, screenshots, and PDFs."); }
+      } catch (e) { note("Couldn’t read " + (f.name || "that file") + ". Try a photo or PDF."); }
+    }
+    renderChips();
+  }
+  function renderChips() {
+    const box = $("attChips"); box.innerHTML = ""; box.hidden = !pending.length;
+    pending.forEach((a, i) => {
+      const chip = document.createElement("div"); chip.className = "attchip";
+      if (a.preview) { const im = document.createElement("img"); im.src = a.preview; im.alt = ""; chip.append(im); }
+      else { const d = document.createElement("div"); d.className = "pdf"; d.textContent = "PDF"; chip.append(d); }
+      const n = document.createElement("span"); n.textContent = a.name; chip.append(n);
+      const x = document.createElement("button"); x.textContent = "×"; x.setAttribute("aria-label", "Remove"); x.onclick = () => { pending.splice(i, 1); renderChips(); };
+      chip.append(x); box.append(chip);
+    });
+    $("textIn").placeholder = pending.length ? "Ask about it, or tap Send" : (state.tr && state.tr.on ? $("textIn").placeholder : "Type to DOT");
+  }
+
   // ---------- sync between devices ----------
   const SYNC_SECTIONS = ["settings", "history", "todos", "qnotes", "debts", "study", "books", "tr", "metals"];
   const LOCAL_ONLY = ["workerUrl", "accessCode", "voiceURI", "syncOn"];
@@ -823,6 +898,14 @@
     if (k === "settings") { const keep = {}; LOCAL_ONLY.forEach((x) => (keep[x] = state.settings[x])); state.settings = { ...DEFAULTS, ...(v || {}), ...keep }; }
     else if (k === "metals") saveMetals(v || {});
     else state[k] = v;
+  }
+  const GUARDED = ["debts", "todos", "qnotes", "study", "books"];
+  function isEmptySection(k, v) {
+    if (v === null || v === undefined) return true;
+    if (Array.isArray(v)) return v.length === 0;
+    if (k === "books") return !v.list || !v.list.length;
+    if (k === "study") return !v.days || !v.days.length;
+    return false;
   }
   function noteChanges() {
     const now = Date.now();
@@ -857,18 +940,31 @@
         const rs = remote.sections || {}, rd = remote.data || {};
         let changedLocal = false, pushNeeded = false;
         if (!syncMeta.lastSync) {
-          const hasRemote = (remote.rev || 0) > 0 && Object.keys(rd).length;
-          if (hasRemote && confirm("DOT found information synced from your other device.\n\nTap OK to load it onto this device (recommended).\nTap Cancel to replace it with what’s on this device.")) {
-            SYNC_SECTIONS.forEach((k) => { if (k in rd) { setSection(k, rd[k]); syncMeta.times[k] = rs[k] || 1; } });
-            changedLocal = true;
-          } else {
-            const now = Date.now(); SYNC_SECTIONS.forEach((k) => (syncMeta.times[k] = now)); pushNeeded = true;
-          }
+          // First sync on this device: take whichever side has information; ask only if both do.
+          const both = SYNC_SECTIONS.filter((k) => GUARDED.includes(k) && k in rd && !isEmptySection(k, rd[k]) && !isEmptySection(k, sectionValue(k)));
+          let preferRemote = true;
+          if (both.length) preferRemote = confirm("This device and your synced information both have: " + both.join(", ") +
+            ".\n\nTap OK to use the synced information (best for a new device).\nTap Cancel to keep what's on this device and send it to your other devices.");
+          backupNow("before first sync");
+          const now = Date.now();
+          SYNC_SECTIONS.forEach((k) => {
+            const hasR = k in rd && !isEmptySection(k, rd[k]), hasL = !isEmptySection(k, sectionValue(k));
+            const useRemote = GUARDED.includes(k) ? (hasR && (!hasL || preferRemote)) : (k in rd && preferRemote);
+            if (useRemote) { setSection(k, rd[k]); syncMeta.times[k] = rs[k] || 1; changedLocal = true; }
+            else { syncMeta.times[k] = now; pushNeeded = true; }
+          });
           syncMeta.lastSync = 1;
         } else {
+          let backedUp = false;
           SYNC_SECTIONS.forEach((k) => {
             const lt = syncMeta.times[k] || 0, rt = rs[k] || 0;
-            if (rt > lt && k in rd) { setSection(k, rd[k]); syncMeta.times[k] = rt; changedLocal = true; }
+            if (rt > lt && k in rd) {
+              if (GUARDED.includes(k) && isEmptySection(k, rd[k]) && !isEmptySection(k, sectionValue(k))) {
+                syncMeta.times[k] = Date.now(); pushNeeded = true; return; // never let an empty copy erase real information
+              }
+              if (!backedUp) { backupNow("before sync"); backedUp = true; }
+              setSection(k, rd[k]); syncMeta.times[k] = rt; changedLocal = true;
+            }
             else if (lt > rt) pushNeeded = true;
           });
         }
@@ -896,6 +992,35 @@
   }
   setInterval(() => { if (!document.hidden && state.settings.syncOn && !busy) syncNow(false); }, 60000);
   document.addEventListener("visibilitychange", () => { if (state.settings.syncOn) syncNow(false); });
+
+  // ---------- restore ----------
+  const describe = (st) => {
+    if (!st) return "";
+    const d = (st.debts || []).length, t = (st.todos || []).filter((x) => !x.done).length, b = st.books && st.books.list ? st.books.list.filter((x) => x.status === "done").length : 0;
+    return d + " debts, " + t + " open tasks" + (st.study ? ", Bible plan" : "") + (b ? ", " + b + " books finished" : "");
+  };
+  function fillBackups(cloud) {
+    const sel = $("bkSel"); sel.innerHTML = "";
+    const local = loadBackups().slice().reverse();
+    local.forEach((b, i) => { const o = document.createElement("option"); o.value = "L" + (local.length - 1 - i);
+      o.textContent = "This device · " + new Date(b.t).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + " · " + describe(b.state); sel.append(o); });
+    (cloud || []).forEach((day) => { const o = document.createElement("option"); o.value = "C" + day; o.textContent = "Cloud · start of " + day; sel.append(o); });
+    if (!sel.options.length) { const o = document.createElement("option"); o.textContent = "No backups yet"; o.value = ""; sel.append(o); }
+  }
+  async function restoreSelected() {
+    const v = $("bkSel").value; if (!v) return;
+    let src = null;
+    if (v[0] === "L") { const b = loadBackups()[Number(v.slice(1))]; src = b && b.state; }
+    else { try { const d = await syncPost({ action: "sync_restore", date: v.slice(1) }); src = d.data || null; if (src && src.settings) src = { ...src }; } catch (e) { alert("Couldn’t load that backup: " + e.message); return; } }
+    if (!src) { alert("That backup is empty."); return; }
+    if (!confirm("Restore this backup?\n\n" + (describe(src) || "") + "\n\nYour current lists, debts, Bible plan, and reading path will be replaced. A copy of what you have now is saved first.")) return;
+    backupNow("before restore");
+    ["todos", "qnotes", "debts", "study", "books"].forEach((k) => { if (k in src) state[k] = src[k]; });
+    fixIds(); writeLocal();
+    if (state.settings.syncOn) { const now = Date.now(); ["todos", "qnotes", "debts", "study", "books"].forEach((k) => { syncMeta.times[k] = now; }); rehash(); saveMeta(); syncNow(false); }
+    refreshAll(); note("Backup restored: " + describe(src) + ".");
+    fillBackups();
+  }
 
   // ---------- personality ----------
   const TONES = ["", "Formal", "Mostly formal", "Balanced", "Warm", "Very warm"];
@@ -1636,6 +1761,11 @@ Quiz, Monday through Saturday, when he asks for it or says he finished the readi
 Sunday is a rest day: no quiz. If asked, give a short recap of the week's readings and quiz scores and preview Monday's reading.
 Never read these control lines aloud or mention them.`,
 
+      `PHOTOS AND DOCUMENTS
+When his message includes a photo or PDF (shown by an "Attached:" note), read it carefully. Say briefly what it is, then the key points: amounts, dates, deadlines, names, and anything he needs to do. Speak only a short summary; put longer detail in an outline block titled with the document's name.
+Before changing anything based on a document, such as a debt balance, a to-do, a note, or his silver or Bible records, state the exact values you read and then apply them with the usual control lines. If any value is blurry, cut off, or uncertain, say so and ask instead of guessing.
+Never repeat full account numbers, card numbers, or Social Security numbers; refer to the last four digits at most. Later in the conversation the image itself is no longer available, so include in your reply every detail he is likely to need afterward.`,
+
       `TO-DO LIST AND NOTES
 ${listForPrompt()}
 To change the list or notes, add one line per change at the very end of your reply, each on its own line, in exactly these forms:
@@ -1706,8 +1836,12 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
   }
   async function ask(text, reverse) {
     text = text.trim();
+    const atts = pending.length && !(state.tr && state.tr.on) ? pending.map(({ media_type, data }) => ({ media_type, data })) : [];
+    const attNames = pending.map((a) => a.name);
+    if (!text && atts.length) text = "Please read this and tell me what it is, what matters, and anything I need to do.";
     if (!text || busy) return;
     if (state.tr && state.tr.on) return translateTurn(text, !!reverse);
+    if (atts.length) { pending = []; renderChips(); text = text + "\n[Attached: " + attNames.join(", ") + "]"; }
     const s = state.settings;
     if (!s.workerUrl) { note("DOT is offline. Add your Worker address in Settings."); openSettings(); return; }
     busy = true;
@@ -1724,7 +1858,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
       const r = await fetch(s.workerUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Access-Code": s.accessCode || "" },
-        body: JSON.stringify({ system: systemPrompt(), messages, prior_silver: priorSilver(),
+        body: JSON.stringify({ system: systemPrompt(), messages, attachments: atts, prior_silver: priorSilver(),
           stack: { holdings: s.stackOz, goal: s.stackGoal, window: s.buyWindow, premium: s.premium },
           watchlist: String(s.watchlist || "").split(/[,\s]+/).filter(Boolean), shares: s.shares || {} })
       });
@@ -2241,6 +2375,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
     $("sTone").value = s.tone; $("sHumor").value = s.humor; $("sLength").value = s.length; $("sFollow").value = s.followups;
     $("sMission").checked = s.mission; $("sSignoff").checked = s.signoff; persLabels();
     $("sSync").checked = !!s.syncOn;
+    fillBackups();
     if (!s.syncOn) syncStatus("Off on this device."); $("sPalette").value = s.palette; $("sBible").value = s.bible; $("sEpisodes").value = s.episodes || "";
     loadVoices();
     if (!dlg.open) dlg.showModal();
@@ -2271,6 +2406,8 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
     };
   }
   $("openSettings").onclick = openSettings;
+  $("bkLoad").onclick = async () => { try { const d = await syncPost({ action: "sync_backups" }); fillBackups(d.backups || []); } catch (e) { alert("Couldn’t load cloud backups: " + e.message); } };
+  $("bkRestore").onclick = restoreSelected;
   $("syncNowBtn").onclick = () => { state.settings = { ...state.settings, ...readForm() }; writeLocal(); syncStatus("Syncing…"); syncNow(true); };
   $("sTone").oninput = persLabels; $("sHumor").oninput = persLabels;
   $("pPresets").querySelectorAll("button").forEach((btn) => btn.onclick = () => {
@@ -2347,6 +2484,8 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
 
   // ---------- inputs ----------
   $("micBtn").onclick = toggleListening;
+  $("attBtn").onclick = () => { unlockSpeech(); $("attFile").click(); };
+  $("attFile").onchange = () => { const f = [...$("attFile").files]; $("attFile").value = ""; addFiles(f); };
   const send = () => { unlockSpeech(); lastInputVoice = false; const t = $("textIn").value; $("textIn").value = ""; ask(t); };
   $("sendBtn").onclick = send;
   $("textIn").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); send(); } });
