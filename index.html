@@ -489,6 +489,10 @@
         <label for="sName">What DOT calls you</label>
         <input id="sName" type="text">
       </div>
+      <h2 style="font-size:1.05rem;margin-top:6px">Sync across devices</h2>
+      <label class="check"><input id="sSync" type="checkbox"> Keep this device in sync with my other devices</label>
+      <small id="syncStatus" style="color:var(--muted)">Off on this device.</small>
+      <button class="btn" id="syncNowBtn" style="justify-self:start">Sync now</button>
       <h2 style="font-size:1.05rem;margin-top:6px">Personality</h2>
       <div class="sbtns" id="pPresets">
         <button class="btn" data-p="classic">Classic DOT</button>
@@ -615,7 +619,8 @@
     return { settings: { ...DEFAULTS }, history: [], todos: [], qnotes: [], debts: [], nextId: 1, tr: { on: false, lang: "Spanish" }, study: null, books: null };
   }
   let state = load();
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+  function writeLocal() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+  function save() { writeLocal(); try { scheduleSync(); } catch (e) {} }
 
   // ---------- to-do list & notes ----------
   const fmtDue = (d) => { const [y, m, dd] = d.split("-").map(Number); return new Date(y, m - 1, dd).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }); };
@@ -800,6 +805,97 @@
       c.append(top, bar, meta, act); list.append(c);
     });
   }
+
+  // ---------- sync between devices ----------
+  const SYNC_SECTIONS = ["settings", "history", "todos", "qnotes", "debts", "study", "books", "tr", "metals"];
+  const LOCAL_ONLY = ["workerUrl", "accessCode", "voiceURI", "syncOn"];
+  const SKEY = "dot.sync";
+  let syncMeta = (() => { try { return JSON.parse(localStorage.getItem(SKEY)) || null; } catch (e) { return null; } })() || { times: {}, hashes: {}, rev: 0, lastSync: 0 };
+  let syncing = false, syncTimer = 0, syncAgain = false;
+  const saveMeta = () => { try { localStorage.setItem(SKEY, JSON.stringify(syncMeta)); } catch (e) {} };
+  const hashStr = (str) => { let h = 5381; for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0; return String(h) + ":" + str.length; };
+  function sectionValue(k) {
+    if (k === "settings") { const o = { ...state.settings }; LOCAL_ONLY.forEach((x) => delete o[x]); return o; }
+    if (k === "metals") return loadMetals();
+    return state[k] === undefined ? null : state[k];
+  }
+  function setSection(k, v) {
+    if (k === "settings") { const keep = {}; LOCAL_ONLY.forEach((x) => (keep[x] = state.settings[x])); state.settings = { ...DEFAULTS, ...(v || {}), ...keep }; }
+    else if (k === "metals") saveMetals(v || {});
+    else state[k] = v;
+  }
+  function noteChanges() {
+    const now = Date.now();
+    SYNC_SECTIONS.forEach((k) => { const h = hashStr(JSON.stringify(sectionValue(k))); if (syncMeta.hashes[k] !== h) { syncMeta.hashes[k] = h; syncMeta.times[k] = now; } });
+    saveMeta();
+  }
+  function rehash() { SYNC_SECTIONS.forEach((k) => (syncMeta.hashes[k] = hashStr(JSON.stringify(sectionValue(k))))); }
+  function fixIds() {
+    let mx = state.nextId || 1;
+    const scan = (arr) => (arr || []).forEach((x) => { if (x && x.id >= mx) mx = x.id + 1; });
+    scan(state.todos); scan(state.qnotes); scan(state.debts); if (state.books) { scan(state.books.list); scan(state.books.playbook); }
+    state.nextId = mx;
+  }
+  function syncStatus(msg) { const el = $("syncStatus"); if (el) el.textContent = msg; }
+  async function syncPost(body) {
+    const s = state.settings;
+    const r = await fetch(s.workerUrl, { method: "POST", headers: { "Content-Type": "application/json", "X-Access-Code": s.accessCode || "" }, body: JSON.stringify(body) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || "status " + r.status);
+    return d;
+  }
+  function refreshAll() { try { applyPalette(state.settings.palette); render(); renderList(); renderTrBar(); } catch (e) {} }
+  async function syncNow(manual) {
+    const s = state.settings;
+    if (!s.syncOn || !s.workerUrl) { if (manual) syncStatus("Turn on sync and add your Worker address first."); return; }
+    if (syncing) { syncAgain = true; return; }
+    syncing = true; clearTimeout(syncTimer);
+    try {
+      noteChanges();
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const remote = await syncPost({ action: "sync_get" });
+        const rs = remote.sections || {}, rd = remote.data || {};
+        let changedLocal = false, pushNeeded = false;
+        if (!syncMeta.lastSync) {
+          const hasRemote = (remote.rev || 0) > 0 && Object.keys(rd).length;
+          if (hasRemote && confirm("DOT found information synced from your other device.\n\nTap OK to load it onto this device (recommended).\nTap Cancel to replace it with what’s on this device.")) {
+            SYNC_SECTIONS.forEach((k) => { if (k in rd) { setSection(k, rd[k]); syncMeta.times[k] = rs[k] || 1; } });
+            changedLocal = true;
+          } else {
+            const now = Date.now(); SYNC_SECTIONS.forEach((k) => (syncMeta.times[k] = now)); pushNeeded = true;
+          }
+          syncMeta.lastSync = 1;
+        } else {
+          SYNC_SECTIONS.forEach((k) => {
+            const lt = syncMeta.times[k] || 0, rt = rs[k] || 0;
+            if (rt > lt && k in rd) { setSection(k, rd[k]); syncMeta.times[k] = rt; changedLocal = true; }
+            else if (lt > rt) pushNeeded = true;
+          });
+        }
+        if (changedLocal) { fixIds(); rehash(); writeLocal(); refreshAll(); }
+        if (!pushNeeded) { syncMeta.rev = remote.rev || 0; break; }
+        const data = {}, sections = {};
+        SYNC_SECTIONS.forEach((k) => { data[k] = sectionValue(k); sections[k] = syncMeta.times[k] || 0; });
+        const put = await syncPost({ action: "sync_put", baseRev: remote.rev || 0, data, sections });
+        if (put.conflict) { await new Promise((r) => setTimeout(r, 600)); continue; }
+        syncMeta.rev = put.rev || 0; break;
+      }
+      syncMeta.lastSync = Date.now(); saveMeta();
+      syncStatus("Synced at " + new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) + ". Changes reach your other devices within about a minute.");
+    } catch (e) {
+      saveMeta();
+      syncStatus("Sync paused: " + (e instanceof TypeError ? "no connection right now." : e.message));
+    } finally {
+      syncing = false;
+      if (syncAgain) { syncAgain = false; scheduleSync(2000); }
+    }
+  }
+  function scheduleSync(delay) {
+    if (!state.settings || !state.settings.syncOn) return;
+    clearTimeout(syncTimer); syncTimer = setTimeout(() => syncNow(false), delay || 8000);
+  }
+  setInterval(() => { if (!document.hidden && state.settings.syncOn && !busy) syncNow(false); }, 60000);
+  document.addEventListener("visibilitychange", () => { if (state.settings.syncOn) syncNow(false); });
 
   // ---------- personality ----------
   const TONES = ["", "Formal", "Mostly formal", "Balanced", "Warm", "Very warm"];
@@ -2143,7 +2239,9 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
     $("sEngine").value = s.engine; $("sFx").checked = s.fx; $("sConvo").checked = s.convo;
     $("sOz").value = s.stackOz; $("sGoal").value = s.stackGoal; $("sWin").value = s.buyWindow; $("sPrem").value = s.premium; $("sDaily").checked = s.dailyReport;
     $("sTone").value = s.tone; $("sHumor").value = s.humor; $("sLength").value = s.length; $("sFollow").value = s.followups;
-    $("sMission").checked = s.mission; $("sSignoff").checked = s.signoff; persLabels(); $("sPalette").value = s.palette; $("sBible").value = s.bible; $("sEpisodes").value = s.episodes || "";
+    $("sMission").checked = s.mission; $("sSignoff").checked = s.signoff; persLabels();
+    $("sSync").checked = !!s.syncOn;
+    if (!s.syncOn) syncStatus("Off on this device."); $("sPalette").value = s.palette; $("sBible").value = s.bible; $("sEpisodes").value = s.episodes || "";
     loadVoices();
     if (!dlg.open) dlg.showModal();
   }
@@ -2166,13 +2264,14 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
       premium: Number($("sPrem").value) || 0,
       dailyReport: $("sDaily").checked,
       tone: Number($("sTone").value), humor: Number($("sHumor").value), length: Number($("sLength").value), followups: Number($("sFollow").value),
-      mission: $("sMission").checked, signoff: $("sSignoff").checked,
+      mission: $("sMission").checked, signoff: $("sSignoff").checked, syncOn: $("sSync").checked,
       palette: $("sPalette").value,
       bible: $("sBible").value,
       episodes: $("sEpisodes").value.trim()
     };
   }
   $("openSettings").onclick = openSettings;
+  $("syncNowBtn").onclick = () => { state.settings = { ...state.settings, ...readForm() }; writeLocal(); syncStatus("Syncing…"); syncNow(true); };
   $("sTone").oninput = persLabels; $("sHumor").oninput = persLabels;
   $("pPresets").querySelectorAll("button").forEach((btn) => btn.onclick = () => {
     const p = PRESETS[btn.dataset.p]; $("sTone").value = p.tone; $("sHumor").value = p.humor; $("sLength").value = p.length;
@@ -2237,6 +2336,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
   $("noteIn").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addNote(); } });
   $("clearDone").onclick = () => { state.todos = state.todos.filter((t) => !t.done); save(); renderList(); };
   $("saveBtn").onclick = () => { state.settings = { ...state.settings, ...readForm() }; save(); dlg.close(); render(); };
+  $("saveBtn").addEventListener("click", () => { if (state.settings.syncOn) setTimeout(() => syncNow(false), 300); });
   $("testVoice").onclick = () => { unlockSpeech(); const f = readForm(); speak(`DOT online. Standing by, ${f.callsign}.`, { ...f, autoSpeak: true }); };
   $("clearBtn").onclick = () => {
     if (confirm("Clear the whole conversation? Your settings stay.")) { state.history = []; save(); render(); dlg.close(); }
@@ -2252,6 +2352,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
   $("textIn").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); send(); } });
 
   applyPalette(state.settings.palette);
+  if (state.settings.syncOn) setTimeout(() => syncNow(false), 1200);
   renderList();
   if (state.timer) { if (state.timer.end <= Date.now()) setTimeout(timerDone, 800); else { runTimer(); keepAwake(true); } }
   render();
