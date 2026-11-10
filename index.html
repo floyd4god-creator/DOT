@@ -128,6 +128,10 @@
   .sday.next { background: color-mix(in srgb, var(--amber) 10%, transparent); border-radius: 8px; }
   .sbtns { display: flex; flex-wrap: wrap; gap: 8px; }
   .sbtns .btn { padding: 8px 12px; font-size: .88rem; }
+  .duechip { font-size: .72rem; font-weight: 600; border-radius: 10px; padding: 2px 9px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; margin-left: auto; margin-right: 10px; }
+  .duechip.soon { color: #1b1b1b; background: #f2b84b; border-color: #f2b84b; }
+  .duechip.over { color: #fff; background: var(--alert); border-color: var(--alert); }
+  .duechip.ok { color: #3fd88a; border-color: #3fd88a; }
   .dsum { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   .dsum div { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
   .dsum b { display: block; font: 600 1.05rem/1.25 var(--display); color: var(--amber); }
@@ -460,6 +464,15 @@
       <div class="bar" id="debtBar"><i style="width:0%"></i></div>
       <small id="debtNote" style="color:var(--muted)"></small>
       <div id="debtList" style="display:grid;gap:10px"></div>
+      <div id="dueBox"></div>
+      <h2 style="font-size:1.05rem">Monthly bills</h2>
+      <div id="billList" style="display:grid;gap:8px"></div>
+      <div class="dadd">
+        <input id="bName" class="wide" type="text" placeholder="Bill name, such as Edison or phone">
+        <input id="bAmt" type="text" inputmode="decimal" placeholder="Amount $">
+        <input id="bDay" type="text" inputmode="numeric" placeholder="Due day (1–31)">
+        <button class="btn primary wide" id="bAdd">Add bill</button>
+      </div>
       <h2 style="font-size:1.05rem">Add a debt</h2>
       <div class="dadd">
         <input id="dName" class="wide" type="text" placeholder="Name, such as Car loan">
@@ -633,9 +646,9 @@
     try {
       const s = JSON.parse(localStorage.getItem(KEY));
       if (s) return { settings: { ...DEFAULTS, ...s.settings }, history: Array.isArray(s.history) ? s.history : [],
-        todos: Array.isArray(s.todos) ? s.todos : [], qnotes: Array.isArray(s.qnotes) ? s.qnotes : [], debts: Array.isArray(s.debts) ? s.debts : [], nextId: s.nextId || 1, tr: s.tr || { on: false, lang: "Spanish" }, study: s.study || null, books: s.books || null };
+        todos: Array.isArray(s.todos) ? s.todos : [], qnotes: Array.isArray(s.qnotes) ? s.qnotes : [], debts: Array.isArray(s.debts) ? s.debts : [], bills: Array.isArray(s.bills) ? s.bills : [], nextId: s.nextId || 1, tr: s.tr || { on: false, lang: "Spanish" }, study: s.study || null, books: s.books || null };
     } catch (e) {}
-    return { settings: { ...DEFAULTS }, history: [], todos: [], qnotes: [], debts: [], nextId: 1, tr: { on: false, lang: "Spanish" }, study: null, books: null };
+    return { settings: { ...DEFAULTS }, history: [], todos: [], qnotes: [], debts: [], bills: [], nextId: 1, tr: { on: false, lang: "Spanish" }, study: null, books: null };
   }
   let state = load();
   function writeLocal() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
@@ -770,9 +783,100 @@
       "\nTotals: owed " + money(t.owed) + ", paid down " + money(t.paid) + " (" + t.pct + "%) since tracking began" +
       (t.free ? ", debt-free by " + t.free + " at current payments." : t.incomplete ? ". Debt-free date unavailable until every debt has an interest rate and payment that covers its interest." : ".");
   }
+  // ---------- due dates and monthly bills ----------
+  const monthKey = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+  const dueIn = (day, y, m) => new Date(y, m, Math.min(day, new Date(y, m + 1, 0).getDate()));
+  function dueStatus(item) {
+    if (!(item.dueDay >= 1 && item.dueDay <= 31)) return null;
+    if (item.balance !== undefined && item.balance <= 0) return null;
+    const now = new Date(), today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const paid = item.paidFor || [];
+    let d = dueIn(item.dueDay, today.getFullYear(), today.getMonth());
+    if (paid.includes(monthKey(d))) {
+      d = dueIn(item.dueDay, today.getFullYear(), today.getMonth() + 1);
+      return { date: d, days: Math.round((d - today) / 86400000), paidThisMonth: true, overdue: false };
+    }
+    const days = Math.round((d - today) / 86400000);
+    return { date: d, days, overdue: days < 0, paidThisMonth: false };
+  }
+  function dueLabel(st) {
+    if (!st) return "";
+    if (st.overdue) return "overdue " + -st.days + " day" + (st.days === -1 ? "" : "s");
+    if (st.paidThisMonth) return "paid this month · next due " + st.date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    if (st.days === 0) return "due today";
+    if (st.days === 1) return "due tomorrow";
+    return "due in " + st.days + " days (" + st.date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) + ")";
+  }
+  function markPaid(item) {
+    const now = new Date(); item.paidFor = item.paidFor || [];
+    const thisDue = dueIn(item.dueDay || 1, now.getFullYear(), now.getMonth()), k = monthKey(thisDue);
+    item.paidFor.push(item.paidFor.includes(k) ? monthKey(dueIn(item.dueDay || 1, now.getFullYear(), now.getMonth() + 1)) : k);
+    item.paidFor = [...new Set(item.paidFor)].slice(-24);
+  }
+  function upcomingBills(withinDays) {
+    const out = [];
+    [...state.debts.map((d) => ({ ...d, kind: "debt", amt: d.plan || d.min })), ...(state.bills || []).map((b) => ({ ...b, kind: "bill", amt: b.amount }))].forEach((x) => {
+      const st = dueStatus(x); if (!st || st.paidThisMonth) return;
+      if (st.overdue || st.days <= withinDays) out.push({ name: x.name, amt: x.amt, st });
+    });
+    return out.sort((a, b) => a.st.days - b.st.days);
+  }
+  function billsForPrompt() {
+    const bills = state.bills || [];
+    const up = upcomingBills(7);
+    return (bills.length ? "Monthly bills: " + bills.map((b) => "#" + b.id + " " + b.name + " " + (b.amount ? money(b.amount) : "amount unknown") + (b.dueDay ? ", due on day " + b.dueDay + ", " + dueLabel(dueStatus(b)) : ", no due day")).join("; ") + "." : "No monthly bills entered.") +
+      "\nDue within 7 days or overdue: " + (up.length ? up.map((u) => u.name + (u.amt ? " " + money(u.amt) : "") + " " + dueLabel(u.st)).join("; ") : "none") + ".";
+  }
+  function findItem(list, arg) {
+    const t = String(arg || "").trim(), id = Number(t.replace(/[^\d]/g, ""));
+    return (/^#?\d+$/.test(t) && list.find((x) => x.id === id)) || list.find((x) => x.name.toLowerCase() === t.toLowerCase()) ||
+      (t.length > 2 ? list.find((x) => x.name.toLowerCase().includes(t.toLowerCase())) : null) || null;
+  }
+  function applyBillCommand(cmd, arg) {
+    const parts = arg.split("|").map((x) => x.trim()); state.bills = state.bills || [];
+    if (cmd === "DEBT_DUE") {
+      const d = findItem(state.debts, parts[0]), day = Math.round(num(parts[1]));
+      if (!d || !(day >= 1 && day <= 31)) return null;
+      d.dueDay = day; return d.name + " due on day " + day + " — " + dueLabel(dueStatus(d));
+    }
+    if (cmd === "BILL_ADD") {
+      if (!parts[0]) return null;
+      const day = Math.round(num(parts[2]));
+      const b = { id: state.nextId++, name: parts[0], amount: num(parts[1]), dueDay: day >= 1 && day <= 31 ? day : null, paidFor: [] };
+      state.bills.push(b); return "Bill added: " + b.name + (b.amount ? " " + money(b.amount) : "") + (b.dueDay ? ", " + dueLabel(dueStatus(b)) : "");
+    }
+    if (cmd === "BILL_PAID") {
+      const b = findItem(state.bills, parts[0]) || findItem(state.debts, parts[0]);
+      if (!b || !b.dueDay) return null;
+      markPaid(b); return "Marked paid: " + b.name + " — " + dueLabel(dueStatus(b));
+    }
+    if (cmd === "BILL_DELETE") {
+      const b = findItem(state.bills, parts[0]); if (!b) return null;
+      state.bills = state.bills.filter((x) => x !== b); return "Removed bill: " + b.name;
+    }
+    if (cmd === "BILL_EDIT") {
+      const b = findItem(state.bills, parts[0]); if (!b) return null;
+      const a = num(parts[1]), day = Math.round(num(parts[2]));
+      if (a !== null) b.amount = a; if (day >= 1 && day <= 31) b.dueDay = day;
+      return b.name + " updated — " + (b.amount ? money(b.amount) + ", " : "") + dueLabel(dueStatus(b));
+    }
+    return null;
+  }
+  function dueBadge() {
+    const n = upcomingBills(3).length, btn = $("debtBtn"); if (!btn) return;
+    let b = btn.querySelector(".count"); if (!b) { b = document.createElement("b"); b.className = "count"; btn.append(b); }
+    b.textContent = n ? String(n) : "";
+  }
+  function dueAlertOnOpen() {
+    const up = upcomingBills(3); dueBadge();
+    if (!up.length || localStorage.getItem("dot.dueAlert") === todayStr()) return;
+    try { localStorage.setItem("dot.dueAlert", todayStr()); } catch (e) {}
+    note("⏰ Bills due soon: " + up.map((u) => u.name + (u.amt ? " " + money(u.amt) : "") + " " + dueLabel(u.st)).join("; ") + ".");
+  }
+
   function applyDebtCommand(cmd, arg) {
     const parts = arg.split("|").map((x) => x.trim());
-    const find = () => { const id = Number(String(parts[0]).replace(/[^\d]/g, "")); return state.debts.find((x) => x.id === id); };
+    const find = () => findItem(state.debts, parts[0]);
     if (cmd === "DEBT_ADD") {
       const name = parts[0], bal = num(parts[1]);
       if (!name || bal === null) return null;
@@ -786,6 +890,7 @@
       const amt = num(parts[1]); if (!(amt > 0)) return null;
       d.balance = Math.max(0, Math.round((d.balance - amt) * 100) / 100);
       d.payments.push({ date: todayStr(), amount: amt });
+      if (d.dueDay) markPaid(d);
       return d.balance === 0 ? "🎉 " + d.name + " is paid off!" : "Payment logged: " + money(amt) + " to " + d.name + ". Balance " + money(d.balance) + " — " + payoffText(d);
     }
     if (cmd === "DEBT_BALANCE") {
@@ -808,7 +913,39 @@
     }
     return null;
   }
+  function renderBills() {
+    const box = $("dueBox"), list = $("billList"); if (!box) return;
+    box.innerHTML = ""; list.innerHTML = "";
+    const up = upcomingBills(7);
+    if (up.length) {
+      const d = document.createElement("div"); d.className = "tbox";
+      const h = document.createElement("strong"); h.textContent = "Due in the next 7 days"; h.style.fontFamily = "var(--display)"; d.append(h);
+      up.forEach((u) => { const r = document.createElement("div"); r.className = "sday";
+        const n = document.createElement("span"); n.className = "r"; n.textContent = u.name + (u.amt ? " · " + money(u.amt) : "");
+        const l = document.createElement("span"); l.className = "sc"; l.textContent = dueLabel(u.st); if (u.st.overdue) l.style.color = "var(--alert)";
+        r.append(n, l); d.append(r); });
+      box.append(d);
+    }
+    (state.bills || []).slice().sort((a, b) => (a.dueDay || 99) - (b.dueDay || 99)).forEach((b) => {
+      const st = dueStatus(b), row = document.createElement("div"); row.className = "bk" + (st && st.paidThisMonth ? " done" : "");
+      const info = document.createElement("div");
+      const t = document.createElement("div"); t.className = "t"; t.textContent = b.name;
+      const a = document.createElement("div"); a.className = "a"; a.textContent = (b.amount ? money(b.amount) : "Amount not set") + (b.dueDay ? " · day " + b.dueDay + " · " + dueLabel(st) : " · no due day");
+      info.append(t, a);
+      const chip = document.createElement("span"); chip.className = "duechip" + (st ? (st.overdue ? " over" : st.paidThisMonth ? " ok" : st.days <= 3 ? " soon" : "") : "");
+      chip.textContent = !st ? "" : st.overdue ? "Overdue" : st.paidThisMonth ? "Paid ✓" : st.days === 0 ? "Today" : st.days + "d";
+      const acts = document.createElement("div"); acts.className = "acts";
+      const pb = document.createElement("button"); pb.className = "btn primary"; pb.textContent = "Mark paid"; pb.disabled = !b.dueDay;
+      pb.onclick = () => { markPaid(b); save(); renderDebts(); };
+      const del = document.createElement("button"); del.className = "btn"; del.textContent = "Remove";
+      del.onclick = () => { if (confirm("Remove " + b.name + "?")) { state.bills = state.bills.filter((x) => x !== b); save(); renderDebts(); } };
+      acts.append(pb, del); row.append(info, chip, acts); list.append(row);
+    });
+    if (!(state.bills || []).length) { const p = document.createElement("p"); p.className = "empty-note"; p.textContent = "Add monthly bills like utilities, phone, or insurance, or tell DOT."; list.append(p); }
+    dueBadge();
+  }
   function renderDebts() {
+    try { renderBills(); } catch (e) {}
     const t = debtTotals();
     $("debtSummary").innerHTML = "";
     [["Owed", money(t.owed)], ["Paid down", money(t.paid) + " · " + t.pct + "%"], ["Debt-free", t.free || "—"]].forEach(([k, v]) => {
@@ -828,6 +965,12 @@
       const bar = document.createElement("div"); bar.className = "bar"; const fill = document.createElement("i"); fill.style.width = Math.max(0, pct) + "%"; bar.append(fill);
       const meta = document.createElement("div"); meta.className = "dmeta";
       meta.textContent = pct + "% paid · rate " + (d.apr !== null && d.apr !== undefined ? d.apr + "%" : "?") + " · min " + (d.min ? money(d.min) : "?") + " · " + payoffText(d);
+      const ds = dueStatus(d);
+      if (ds) {
+        const chip = document.createElement("span"); chip.className = "duechip" + (ds.overdue ? " over" : ds.paidThisMonth ? " ok" : ds.days <= 3 ? " soon" : "");
+        chip.textContent = ds.overdue ? "Overdue " + -ds.days + "d" : ds.paidThisMonth ? "Paid ✓" : ds.days === 0 ? "Due today" : "Due in " + ds.days + "d";
+        top.insertBefore(chip, bal);
+      }
       const act = document.createElement("div"); act.className = "dact";
       const inp = document.createElement("input"); inp.type = "text"; inp.inputMode = "decimal"; inp.placeholder = "Amount $";
       const pay = document.createElement("button"); pay.className = "btn primary"; pay.textContent = "Log payment";
@@ -836,7 +979,10 @@
       setb.onclick = () => { if (applyDebtCommand("DEBT_BALANCE", d.id + "|" + inp.value)) { save(); renderDebts(); } };
       const del = document.createElement("button"); del.className = "del"; del.textContent = "×"; del.setAttribute("aria-label", "Delete debt");
       del.onclick = () => { if (confirm("Remove " + d.name + "?")) { applyDebtCommand("DEBT_DELETE", String(d.id)); save(); renderDebts(); } };
-      act.append(inp, pay, setb, del);
+      const dd = document.createElement("input"); dd.type = "text"; dd.inputMode = "numeric"; dd.placeholder = "Due day"; dd.style.width = "84px";
+      dd.value = d.dueDay || ""; dd.title = "Day of the month this payment is due";
+      dd.onchange = () => { const v = Math.round(Number(dd.value)); d.dueDay = v >= 1 && v <= 31 ? v : null; save(); renderDebts(); };
+      act.append(inp, pay, setb, dd, del);
       c.append(top, bar, meta, act); list.append(c);
     });
   }
@@ -882,7 +1028,7 @@
   }
 
   // ---------- sync between devices ----------
-  const SYNC_SECTIONS = ["settings", "history", "todos", "qnotes", "debts", "study", "books", "tr", "metals"];
+  const SYNC_SECTIONS = ["settings", "history", "todos", "qnotes", "debts", "bills", "study", "books", "tr", "metals"];
   const LOCAL_ONLY = ["workerUrl", "accessCode", "voiceURI", "syncOn"];
   const SKEY = "dot.sync";
   let syncMeta = (() => { try { return JSON.parse(localStorage.getItem(SKEY)) || null; } catch (e) { return null; } })() || { times: {}, hashes: {}, rev: 0, lastSync: 0 };
@@ -899,7 +1045,7 @@
     else if (k === "metals") saveMetals(v || {});
     else state[k] = v;
   }
-  const GUARDED = ["debts", "todos", "qnotes", "study", "books"];
+  const GUARDED = ["debts", "bills", "todos", "qnotes", "study", "books"];
   function isEmptySection(k, v) {
     if (v === null || v === undefined) return true;
     if (Array.isArray(v)) return v.length === 0;
@@ -916,7 +1062,7 @@
   function fixIds() {
     let mx = state.nextId || 1;
     const scan = (arr) => (arr || []).forEach((x) => { if (x && x.id >= mx) mx = x.id + 1; });
-    scan(state.todos); scan(state.qnotes); scan(state.debts); if (state.books) { scan(state.books.list); scan(state.books.playbook); }
+    scan(state.todos); scan(state.qnotes); scan(state.debts); scan(state.bills); if (state.books) { scan(state.books.list); scan(state.books.playbook); }
     state.nextId = mx;
   }
   function syncStatus(msg) { const el = $("syncStatus"); if (el) el.textContent = msg; }
@@ -1015,9 +1161,9 @@
     if (!src) { alert("That backup is empty."); return; }
     if (!confirm("Restore this backup?\n\n" + (describe(src) || "") + "\n\nYour current lists, debts, Bible plan, and reading path will be replaced. A copy of what you have now is saved first.")) return;
     backupNow("before restore");
-    ["todos", "qnotes", "debts", "study", "books"].forEach((k) => { if (k in src) state[k] = src[k]; });
+    ["todos", "qnotes", "debts", "bills", "study", "books"].forEach((k) => { if (k in src) state[k] = src[k]; });
     fixIds(); writeLocal();
-    if (state.settings.syncOn) { const now = Date.now(); ["todos", "qnotes", "debts", "study", "books"].forEach((k) => { syncMeta.times[k] = now; }); rehash(); saveMeta(); syncNow(false); }
+    if (state.settings.syncOn) { const now = Date.now(); ["todos", "qnotes", "debts", "bills", "study", "books"].forEach((k) => { syncMeta.times[k] = now; }); rehash(); saveMeta(); syncNow(false); }
     refreshAll(); note("Backup restored: " + describe(src) + ".");
     fillBackups();
   }
@@ -1712,7 +1858,7 @@ Use MEMO only for things worth keeping long term. Never read the MEMO line aloud
       `BRIEFING
 When ${name} asks for a briefing, gather everything with your tools first: Helendale weather, his calendar for today if you have a calendar tool, silver prices with his stack, and the top three national news headlines from one web search.
 Then deliver one spoken rundown of about 170 words in this order:
-a short greeting suited to the time of day; the weather now, the high and low, and anything notable; today's schedule, or say his calendar is clear; silver in two sentences covering price and direction, buying window status, and stack progress; his to-do list in one sentence, naming overdue and due-today items and how many others are open; his Bible reading for today in one sentence, including whether he is behind, or on Sunday that it is a rest day; one market sentence from get_stocks for his watchlist, such as how many are up or down and the biggest mover, noting if the market is closed; if a book review is due, mention it in a few words; three headlines in one sentence each; then close with one short question or suggestion.
+a short greeting suited to the time of day; the weather now, the high and low, and anything notable; today's schedule, or say his calendar is clear; silver in two sentences covering price and direction, buying window status, and stack progress; his to-do list in one sentence, naming overdue and due-today items and how many others are open; his Bible reading for today in one sentence, including whether he is behind, or on Sunday that it is a rest day; one market sentence from get_stocks for his watchlist, such as how many are up or down and the biggest mover, noting if the market is closed; if a book review is due, mention it in a few words; bills due within 7 days or overdue, from his bills and due dates list, in one sentence with amounts, or say nothing is due this week; three headlines in one sentence each; then close with one short question or suggestion.
 Do not give the full silver report unless he asks for it, and do not state the clock time. If any source is unavailable, say so in a few words and continue with the rest.`,
 
       `SCRIPTURE AND SERMON PREP
@@ -1788,6 +1934,14 @@ DEBT_BALANCE: id | new balance
 DEBT_TERMS: id | interest rate percent | minimum monthly payment
 DEBT_PLAN: id | planned monthly payment
 DEBT_DELETE: id
+DEBT_DUE: id or name | day of month the payment is due
+BILLS AND DUE DATES (bills are monthly payments that are not debts, such as utilities, phone, or insurance):
+${billsForPrompt()}
+BILL_ADD: name | amount | due day
+BILL_EDIT: id or name | amount | due day
+BILL_PAID: id or name (marks this month's payment made, for a bill or a debt)
+BILL_DELETE: id or name
+Logging a debt payment with DEBT_PAY also marks that debt paid for the month. Report due dates exactly as listed above; never compute your own.
 The starting balance field is optional; include it only when he gives one, so progress already made is kept. Use only numbers he states; leave a field empty if he did not give it, and ask for the missing interest rate or minimum payment. Never read these lines aloud or mention them.
 Report balances, totals, percentages, and payoff dates exactly as listed above. Never calculate your own payoff dates, interest, or what-if results. If he asks a what-if, such as paying more each month, record it with DEBT_PLAN and tell him the new estimate will appear on screen. You may explain the avalanche method (highest interest rate first) and snowball method (smallest balance first) and say which debt each would target, using the list above. Celebrate paid-off debts briefly. This is tracking help, not financial advice.`,
 
@@ -1881,7 +2035,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
       if (stackNew !== null && !isNaN(stackNew)) state.settings.stackOz = stackNew;
       recordSilver(data.metals);
       const listChanges = [];
-      reply = reply.replace(/^\s*(TODO_ADD|TODO_DONE|TODO_UNDONE|TODO_DELETE|NOTE_DELETE|NOTE|DEBT_ADD|DEBT_PAY|DEBT_BALANCE|DEBT_TERMS|DEBT_PLAN|DEBT_DELETE|STUDY_PLAN|STUDY_THEME|STUDY_READ|STUDY_SCORE|BOOK_ADD|BOOK_START|BOOK_PROGRESS|BOOK_DONE|BOOK_SKIP|BOOK_REMOVE|BOOK_CHECK|BOOK_REVIEWED|PLAYBOOK|TIMER_START|TIMER_STOP|TIMER_ADD):\s*(.*)$/gim, (m, cmd, arg) => {
+      reply = reply.replace(/^\s*(TODO_ADD|TODO_DONE|TODO_UNDONE|TODO_DELETE|NOTE_DELETE|NOTE|DEBT_ADD|DEBT_PAY|DEBT_BALANCE|DEBT_TERMS|DEBT_PLAN|DEBT_DELETE|DEBT_DUE|BILL_ADD|BILL_PAID|BILL_DELETE|BILL_EDIT|STUDY_PLAN|STUDY_THEME|STUDY_READ|STUDY_SCORE|BOOK_ADD|BOOK_START|BOOK_PROGRESS|BOOK_DONE|BOOK_SKIP|BOOK_REMOVE|BOOK_CHECK|BOOK_REVIEWED|PLAYBOOK|TIMER_START|TIMER_STOP|TIMER_ADD):\s*(.*)$/gim, (m, cmd, arg) => {
         const C = cmd.toUpperCase();
         if (C.startsWith("TIMER_")) {
           let tm = null;
@@ -1891,7 +2045,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
           if (tm) listChanges.push(tm);
           return "";
         }
-        const msg = C.startsWith("DEBT_") ? applyDebtCommand(C, arg.trim()) : C.startsWith("STUDY_") ? applyStudyCommand(C, arg.trim())
+        const msg = (C === "DEBT_DUE" || C.startsWith("BILL_")) ? applyBillCommand(C, arg.trim()) : C.startsWith("DEBT_") ? applyDebtCommand(C, arg.trim()) : C.startsWith("STUDY_") ? applyStudyCommand(C, arg.trim())
           : (C.startsWith("BOOK_") || C === "PLAYBOOK") ? applyBookCommand(C, arg.trim()) : applyListCommand(C, arg.trim());
         if (msg) listChanges.push(msg);
         return "";
@@ -1908,7 +2062,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
       memos.forEach((f) => { const p = document.createElement("p"); p.className = "msg memo"; p.textContent = "Saved to memory: " + f; logEl.append(p); });
       epMsgs.forEach((t) => listChanges.push(t));
       listChanges.forEach((t) => { const p = document.createElement("p"); p.className = "msg memo"; p.textContent = t; logEl.append(p); });
-      if (listChanges.length) { renderList(); renderDebts(); }
+      if (listChanges.length) { renderList(); renderDebts(); dueBadge(); }
       scrollDown();
       const spokenPart = splitBlocks(reply).spoken;
       speak(spokenPart || "It is on your screen.");
@@ -2492,6 +2646,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
 
   applyPalette(state.settings.palette);
   if (state.settings.syncOn) setTimeout(() => syncNow(false), 1200);
+  setTimeout(() => { try { dueAlertOnOpen(); } catch (e) {} }, 900);
   renderList();
   if (state.timer) { if (state.timer.end <= Date.now()) setTimeout(timerDone, 800); else { runTimer(); keepAwake(true); } }
   render();
