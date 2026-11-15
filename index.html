@@ -256,7 +256,10 @@
     border: 1px solid var(--line); border-radius: 14px; padding: 0;
   }
   dialog::backdrop { background: rgba(5, 8, 12, .7); }
-  .sheet { padding: 22px 22px 18px; display: grid; gap: 16px; }
+  .sheet { padding: 22px 22px 18px; display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+  #fbBody { grid-template-columns: minmax(0, 1fr); }
+  #fbBody > *, #fbBody input, #fbBody select, #fbBody button { min-width: 0; }
+  #fbBody input, #fbBody select { max-width: 100%; }
   .sheet h2 { font: 600 1.3rem/1.2 var(--display); margin: 0; color: var(--amber); letter-spacing: .04em; }
   .field { display: grid; gap: 6px; }
   .field label { font-weight: 500; }
@@ -282,6 +285,10 @@
     <button class="icon-btn brief-btn" id="listBtn" aria-label="List and notes">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg>
       <span>List</span><b class="count" id="listCount"></b>
+    </button>
+    <button class="icon-btn brief-btn" id="fbBtn" aria-label="Family Bank">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10l9-6 9 6"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8"/><path d="M3 20h18"/></svg>
+      <span>Bank</span><b class="count" id="fbCount"></b>
     </button>
     <button class="icon-btn brief-btn" id="booksBtn" aria-label="Wealth reading path">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5a1 1 0 0 1 1-1h3v15H5a1 1 0 0 1-1-1z"/><path d="M8 4h4v15H8z"/><path d="M13.5 5.2l3.4-.9 3.6 13.6-3.4.9z"/></svg>
@@ -402,6 +409,15 @@
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1"/><path d="M12 18v4"/></svg>
     </button>
   </footer>
+
+  <dialog id="fbDlg">
+    <div class="sheet">
+      <h2 tabindex="-1" autofocus style="outline:none">Family Bank</h2>
+      <div id="fbBody" style="display:grid;gap:12px"></div>
+      <small style="color:var(--muted)">Records only: DOT never moves money. Have your CPA or attorney review the fund's setup and your promissory note template before the first loan. Not legal or tax advice.</small>
+      <div class="actions"><span></span><button class="btn primary" id="fbClose">Close</button></div>
+    </div>
+  </dialog>
 
   <dialog id="booksDlg">
     <div class="sheet">
@@ -646,9 +662,9 @@
     try {
       const s = JSON.parse(localStorage.getItem(KEY));
       if (s) return { settings: { ...DEFAULTS, ...s.settings }, history: Array.isArray(s.history) ? s.history : [],
-        todos: Array.isArray(s.todos) ? s.todos : [], qnotes: Array.isArray(s.qnotes) ? s.qnotes : [], debts: Array.isArray(s.debts) ? s.debts : [], bills: Array.isArray(s.bills) ? s.bills : [], nextId: s.nextId || 1, tr: s.tr || { on: false, lang: "Spanish" }, study: s.study || null, books: s.books || null };
+        todos: Array.isArray(s.todos) ? s.todos : [], qnotes: Array.isArray(s.qnotes) ? s.qnotes : [], debts: Array.isArray(s.debts) ? s.debts : [], bills: Array.isArray(s.bills) ? s.bills : [], nextId: s.nextId || 1, tr: s.tr || { on: false, lang: "Spanish" }, study: s.study || null, books: s.books || null, fbank: s.fbank || null };
     } catch (e) {}
-    return { settings: { ...DEFAULTS }, history: [], todos: [], qnotes: [], debts: [], bills: [], nextId: 1, tr: { on: false, lang: "Spanish" }, study: null, books: null };
+    return { settings: { ...DEFAULTS }, history: [], todos: [], qnotes: [], debts: [], bills: [], nextId: 1, tr: { on: false, lang: "Spanish" }, study: null, books: null, fbank: null };
   }
   let state = load();
   function writeLocal() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
@@ -868,6 +884,9 @@
     b.textContent = n ? String(n) : "";
   }
   function dueAlertOnOpen() {
+    try { renderFbank(); const late = fbAlerts().filter((x) => x.st.late);
+      if (late.length && localStorage.getItem("dot.fbAlert") !== todayStr()) { localStorage.setItem("dot.fbAlert", todayStr());
+        note("🏦 Family Bank: " + late.map((x) => x.l.borrower + "'s payment of " + money(x.l.payment) + " is past the grace period").join("; ") + "."); } } catch (e) {}
     const up = upcomingBills(3); dueBadge();
     if (!up.length || localStorage.getItem("dot.dueAlert") === todayStr()) return;
     try { localStorage.setItem("dot.dueAlert", todayStr()); } catch (e) {}
@@ -1028,7 +1047,7 @@
   }
 
   // ---------- sync between devices ----------
-  const SYNC_SECTIONS = ["settings", "history", "todos", "qnotes", "debts", "bills", "study", "books", "tr", "metals"];
+  const SYNC_SECTIONS = ["settings", "history", "todos", "qnotes", "debts", "bills", "study", "books", "fbank", "tr", "metals"];
   const LOCAL_ONLY = ["workerUrl", "accessCode", "voiceURI", "syncOn"];
   const SKEY = "dot.sync";
   let syncMeta = (() => { try { return JSON.parse(localStorage.getItem(SKEY)) || null; } catch (e) { return null; } })() || { times: {}, hashes: {}, rev: 0, lastSync: 0 };
@@ -1045,12 +1064,13 @@
     else if (k === "metals") saveMetals(v || {});
     else state[k] = v;
   }
-  const GUARDED = ["debts", "bills", "todos", "qnotes", "study", "books"];
+  const GUARDED = ["debts", "bills", "todos", "qnotes", "study", "books", "fbank"];
   function isEmptySection(k, v) {
     if (v === null || v === undefined) return true;
     if (Array.isArray(v)) return v.length === 0;
     if (k === "books") return !v.list || !v.list.length;
     if (k === "study") return !v.days || !v.days.length;
+    if (k === "fbank") return !(v.loans || []).length && !(v.ledger || []).length;
     return false;
   }
   function noteChanges() {
@@ -1062,7 +1082,7 @@
   function fixIds() {
     let mx = state.nextId || 1;
     const scan = (arr) => (arr || []).forEach((x) => { if (x && x.id >= mx) mx = x.id + 1; });
-    scan(state.todos); scan(state.qnotes); scan(state.debts); scan(state.bills); if (state.books) { scan(state.books.list); scan(state.books.playbook); }
+    scan(state.todos); scan(state.qnotes); scan(state.debts); scan(state.bills); if (state.fbank) { scan(state.fbank.loans); scan(state.fbank.ledger); } if (state.books) { scan(state.books.list); scan(state.books.playbook); }
     state.nextId = mx;
   }
   function syncStatus(msg) { const el = $("syncStatus"); if (el) el.textContent = msg; }
@@ -1161,9 +1181,9 @@
     if (!src) { alert("That backup is empty."); return; }
     if (!confirm("Restore this backup?\n\n" + (describe(src) || "") + "\n\nYour current lists, debts, Bible plan, and reading path will be replaced. A copy of what you have now is saved first.")) return;
     backupNow("before restore");
-    ["todos", "qnotes", "debts", "bills", "study", "books"].forEach((k) => { if (k in src) state[k] = src[k]; });
+    ["todos", "qnotes", "debts", "bills", "study", "books", "fbank"].forEach((k) => { if (k in src) state[k] = src[k]; });
     fixIds(); writeLocal();
-    if (state.settings.syncOn) { const now = Date.now(); ["todos", "qnotes", "debts", "bills", "study", "books"].forEach((k) => { syncMeta.times[k] = now; }); rehash(); saveMeta(); syncNow(false); }
+    if (state.settings.syncOn) { const now = Date.now(); ["todos", "qnotes", "debts", "bills", "study", "books", "fbank"].forEach((k) => { syncMeta.times[k] = now; }); rehash(); saveMeta(); syncNow(false); }
     refreshAll(); note("Backup restored: " + describe(src) + ".");
     fillBackups();
   }
@@ -1396,6 +1416,289 @@
       row.append(a, r, ok, scE, mark); list.append(row);
     });
     box.append(ttl, sum, bar, btns, list);
+  }
+
+  // ---------- Family Bank (family assistance fund) ----------
+  const FB_RELS = ["Child", "Child's spouse", "Grandchild", "Sibling"];
+  const FB_PURPOSES = ["Emergency", "Education", "Car", "Starting a business"];
+  function fbank() {
+    if (!state.fbank) state.fbank = { charter: { fundName: "Dorsey Family Assistance Fund", maxPerPerson: 4000, rate: 1.5, maxRate: 2, term: 36, grace: 10,
+      approval: "Family board", afr: null, afrNote: "" }, loans: [], ledger: [] };
+    return state.fbank;
+  }
+  const r2c = (n) => Math.round((Number(n) || 0) * 100) / 100;
+  const addMonths = (str, k) => { const d = parseYmd(str); const t = new Date(d.getFullYear(), d.getMonth() + k, 1); t.setDate(Math.min(d.getDate(), new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate())); return ymd(t); };
+  const fmtD = (str) => str ? parseYmd(str).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
+  function pmtOf(P, rate, n) { const r = rate / 1200; return r2c(r ? (P * r) / (1 - Math.pow(1 + r, -n)) : P / n); }
+  function mapRel(t) {
+    const x = String(t || "").toLowerCase();
+    if (/in-law|spouse|husband|wife/.test(x)) return "Child's spouse";
+    if (/grand/.test(x)) return "Grandchild";
+    if (/brother|sister|sibling/.test(x)) return "Sibling";
+    if (/son|daughter|child/.test(x)) return "Child";
+    return String(t || "").trim();
+  }
+  function mapPurpose(t) {
+    const x = String(t || "").toLowerCase();
+    if (/emergenc|medical|repair|urgent/.test(x)) return "Emergency";
+    if (/educat|school|tuition|college|class|books/.test(x)) return "Education";
+    if (/\bcar\b|vehicle|auto|truck/.test(x)) return "Car";
+    if (/business|start.?up|company/.test(x)) return "Starting a business";
+    return String(t || "").trim();
+  }
+  function fbTotals() {
+    const fb = fbank(); let contrib = 0, out = 0, back = 0, interest = 0;
+    fb.ledger.forEach((e) => { if (e.type === "contribution") contrib += e.amount; else if (e.type === "loan") out += e.amount; else if (e.type === "repayment") { back += e.amount; interest += e.interest || 0; } });
+    const outstanding = fb.loans.filter((l) => l.status === "active").reduce((a, l) => a + l.balance, 0);
+    return { contrib: r2c(contrib), lent: r2c(out), repaid: r2c(back), interest: r2c(interest), available: r2c(contrib + back - out), outstanding: r2c(outstanding) };
+  }
+  const sameName = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+  function borrowerOutstanding(name, exceptId) {
+    return fbank().loans.filter((l) => sameName(l.borrower, name) && l.id !== exceptId && ["requested", "approved", "active"].includes(l.status))
+      .reduce((a, l) => a + (l.status === "active" ? l.balance : l.amount), 0);
+  }
+  function checkLoan(l) {
+    const c = fbank().charter, flags = [];
+    if (!FB_RELS.includes(l.rel)) flags.push({ level: "block", text: "Not an eligible borrower under the charter (children and their families, and siblings only)." });
+    if (!FB_PURPOSES.includes(l.purpose)) flags.push({ level: "block", text: "Purpose isn't allowed by the charter (emergency, education, car, or starting a business)." });
+    const total = borrowerOutstanding(l.borrower, l.id) + (l.status === "active" ? l.balance : l.amount);
+    if (total > c.maxPerPerson) flags.push({ level: "block", text: "Over the " + money(c.maxPerPerson) + " per-person limit (" + l.borrower + " would owe " + money(total) + ")." });
+    if (l.rate >= c.maxRate) flags.push({ level: "flag", text: "Rate " + l.rate + "% is at or above the charter's " + c.maxRate + "% ceiling." });
+    if (total > 100000) flags.push({ level: "flag", text: "Over the IRS $100,000 line for this borrower. Talk to your CPA before lending." });
+    else if (total > 10000) flags.push({ level: "flag", text: "Over the IRS $10,000 line for this borrower. A rate below the IRS minimum (AFR) may create taxable imputed interest. Ask your CPA." });
+    else if (l.purpose === "Starting a business") flags.push({ level: "flag", text: "Business loan: the IRS $10,000 exception may not apply if the money buys or carries income-producing assets. Ask your CPA." });
+    if (c.afr && l.rate < c.afr && total > 10000) flags.push({ level: "flag", text: "Rate is below the AFR you entered (" + c.afr + "%)." });
+    if (l.status !== "active" && l.status !== "paid" && l.amount > fbTotals().available) flags.push({ level: "flag", text: "The fund has only " + money(fbTotals().available) + " available to lend." });
+    return flags;
+  }
+  function loanStatus(l) {
+    if (l.status !== "active") return null;
+    const paid = (l.payments || []).reduce((a, p) => a + p.amount, 0);
+    const covered = Math.floor(paid / l.payment + 0.001);
+    if (covered >= l.term || l.balance <= 0) return null;
+    const due = addMonths(l.firstDue, covered), today = parseYmd(todayStr());
+    const days = Math.round((parseYmd(due) - today) / 86400000), grace = fbank().charter.grace;
+    return { due, days, late: days < -grace, inGrace: days < 0 && days >= -grace, lateBy: -days - grace };
+  }
+  function loanStatusText(st) {
+    if (!st) return "";
+    if (st.late) return "LATE: payment due " + fmtD(st.due) + " is past the " + fbank().charter.grace + "-day grace period";
+    if (st.inGrace) return "In grace period: payment due " + fmtD(st.due) + " (" + (fbank().charter.grace + st.days) + " grace days left)";
+    if (st.days === 0) return "Payment due today";
+    return "Next payment due " + fmtD(st.due) + " (in " + st.days + " day" + (st.days === 1 ? "" : "s") + ")";
+  }
+  function findLoan(arg, statuses) {
+    const fb = fbank(), t = String(arg || "").trim(), pool = fb.loans.filter((l) => !statuses || statuses.includes(l.status));
+    if (/^#?\d+$/.test(t)) return pool.find((l) => l.id === Number(t.replace("#", ""))) || null;
+    return pool.find((l) => sameName(l.borrower, t)) || (t.length > 2 ? pool.find((l) => l.borrower.toLowerCase().includes(t.toLowerCase())) : null) || null;
+  }
+  function fundLoan(l, date) {
+    l.status = "active"; l.funded = date || todayStr();
+    if (!l.firstDue || l.firstDue <= l.funded) l.firstDue = addMonths(l.funded, 1);
+    l.balance = l.amount; l.payment = pmtOf(l.amount, l.rate, l.term); l.payments = [];
+    fbank().ledger.push({ id: state.nextId++, date: l.funded, type: "loan", amount: l.amount, loanId: l.id, memo: "Loan to " + l.borrower + " (" + l.purpose + ")" });
+  }
+  function payLoan(l, amt, date) {
+    const r = l.rate / 1200; let interest = r2c(l.balance * r); if (amt < interest) interest = amt;
+    const principal = r2c(Math.min(l.balance, amt - interest));
+    l.balance = r2c(Math.max(0, l.balance - principal));
+    l.payments.push({ date: date || todayStr(), amount: r2c(amt), interest, principal });
+    fbank().ledger.push({ id: state.nextId++, date: date || todayStr(), type: "repayment", amount: r2c(amt), interest, loanId: l.id, memo: "Payment from " + l.borrower });
+    if (l.balance <= 0) { l.status = "paid"; l.paidOff = date || todayStr(); }
+  }
+  function applyFbankCommand(cmd, arg) {
+    const fb = fbank(), c = fb.charter, p = arg.split("|").map((x) => x.trim());
+    if (cmd === "FBANK_CONTRIB") {
+      const amt = num(p[0]); if (!(amt > 0)) return null;
+      fb.ledger.push({ id: state.nextId++, date: todayStr(), type: "contribution", amount: r2c(amt), from: p[1] || "", memo: p[2] || "Contribution" + (p[1] ? " from " + p[1] : "") });
+      return "Family Bank contribution: " + money(amt) + (p[1] ? " from " + p[1] : "") + ". Available to lend: " + money(fbTotals().available);
+    }
+    if (cmd === "FBANK_REQUEST") {
+      const amt = num(p[3]); if (!p[0] || !(amt > 0)) return null;
+      const rate = num(p[4]) !== null ? num(p[4]) : c.rate, due = /^\d{4}-\d{2}-\d{2}$/.test(p[5] || "") ? p[5] : null;
+      const l = { id: state.nextId++, borrower: p[0], rel: mapRel(p[1]), purpose: mapPurpose(p[2]), amount: r2c(amt), rate, term: c.term, status: "requested",
+        requested: todayStr(), firstDue: due, payment: pmtOf(amt, rate, c.term), balance: r2c(amt), payments: [] };
+      fb.loans.push(l);
+      const f = checkLoan(l);
+      return "Loan request recorded: " + l.borrower + ", " + money(l.amount) + " for " + l.purpose.toLowerCase() + " at " + l.rate + "% over " + l.term + " months (" + money(l.payment) + "/mo). " +
+        (f.length ? "Charter check: " + f.map((x) => (x.level === "block" ? "⛔ " : "⚠️ ") + x.text).join(" ") : "Charter check: meets all rules.") + (f.some((x) => x.level === "block") ? " The charter doesn't allow this one as written; the board would have to override it." : " Waiting for the family board.");
+    }
+    if (cmd === "FBANK_APPROVE" || cmd === "FBANK_DECLINE") {
+      const l = findLoan(p[0], ["requested"]); if (!l) return null;
+      if (cmd === "FBANK_DECLINE") { l.status = "declined"; l.boardNote = p[1] || ""; l.decided = todayStr(); return "Loan request declined: " + l.borrower; }
+      l.status = "approved"; l.boardNote = p[1] || ""; l.decided = todayStr();
+      return "Approved by the family board: " + l.borrower + ", " + money(l.amount) + (l.boardNote ? " (" + l.boardNote + ")" : "") + ". Mark it funded when the money is sent.";
+    }
+    if (cmd === "FBANK_FUND") {
+      const l = findLoan(p[0], ["approved"]); if (!l) return null;
+      fundLoan(l, /^\d{4}-\d{2}-\d{2}$/.test(p[1] || "") ? p[1] : null);
+      return "Loan funded: " + l.borrower + ", " + money(l.amount) + ". " + l.term + " payments of " + money(l.payment) + " starting " + fmtD(l.firstDue) + ".";
+    }
+    if (cmd === "FBANK_PAY") {
+      const l = findLoan(p[0], ["active"]), amt = num(p[1]); if (!l || !(amt > 0)) return null;
+      payLoan(l, amt);
+      return l.status === "paid" ? "🎉 " + l.borrower + "'s Family Bank loan is paid in full!" : "Family Bank payment: " + money(amt) + " from " + l.borrower + ". Balance " + money(l.balance) + ". " + loanStatusText(loanStatus(l));
+    }
+    if (cmd === "FBANK_AFR") {
+      const v = num(p[0]); if (v === null) return null;
+      c.afr = v; c.afrNote = p.slice(1).join(" | ") || ""; c.afrDate = todayStr();
+      return "IRS minimum rate (AFR) recorded: " + v + "%" + (c.afrNote ? " (" + c.afrNote + ")" : "");
+    }
+    return null;
+  }
+  function fbankForPrompt() {
+    const fb = fbank(), c = fb.charter, t = fbTotals();
+    const loans = fb.loans.filter((l) => l.status !== "declined").map((l) => {
+      const st = loanStatus(l), f = checkLoan(l);
+      return "#" + l.id + " " + l.borrower + " (" + l.rel + "), " + l.purpose + ", " + money(l.amount) + " at " + l.rate + "%, " + l.term + " months, " + money(l.payment) + "/mo, status " + l.status +
+        (l.status === "active" ? ", balance " + money(l.balance) + ", " + loanStatusText(st) : "") + (l.status === "paid" ? ", paid off " + l.paidOff : "") +
+        (f.length && ["requested", "approved"].includes(l.status) ? ", charter flags: " + f.map((x) => x.text).join(" ") : "");
+    });
+    return "Charter: fund name " + c.fundName + "; borrowers: children and their families (child, child's spouse, grandchild) and siblings; purposes: emergency, education, car, starting a business; maximum " + money(c.maxPerPerson) +
+      " per person; standard rate " + c.rate + "% (ceiling " + c.maxRate + "%); " + c.term + " monthly payments; " + c.grace + "-day grace period; approval by the family board; IRS minimum rate (AFR) " + (c.afr ? c.afr + "% entered " + c.afrDate + (c.afrNote ? " (" + c.afrNote + ")" : "") : "not entered") + "." +
+      "\nFund: available to lend " + money(t.available) + "; contributions " + money(t.contrib) + "; lent " + money(t.lent) + "; repaid " + money(t.repaid) + "; interest earned " + money(t.interest) + "; outstanding " + money(t.outstanding) + "." +
+      "\nLoans: " + (loans.length ? loans.join("\n") : "none yet.");
+  }
+  function fbAlerts() {
+    return fbank().loans.filter((l) => l.status === "active").map((l) => ({ l, st: loanStatus(l) })).filter((x) => x.st && (x.st.days <= 7));
+  }
+  function promissoryNote(l) {
+    const c = fbank().charter, last = addMonths(l.firstDue || addMonths(todayStr(), 1), l.term - 1);
+    return [
+      "DRAFT PROMISSORY NOTE — FOR ATTORNEY REVIEW",
+      "",
+      "Date: " + (l.funded ? fmtD(l.funded) : "____________"),
+      "Principal amount: " + money(l.amount),
+      "Lender: " + c.fundName,
+      "Borrower: " + l.borrower,
+      "Purpose of loan: " + l.purpose,
+      "",
+      "1. Promise to pay. For value received, the Borrower promises to pay the Lender the principal amount of " + money(l.amount) + ", plus interest at " + l.rate + "% per year on the unpaid balance.",
+      "2. Payments. The Borrower will make " + l.term + " monthly payments of " + money(l.payment) + ", beginning " + fmtD(l.firstDue || addMonths(todayStr(), 1)) + " and on the same day of each month after that. The final payment is due " + fmtD(last) + ".",
+      "3. Application of payments. Each payment is applied first to accrued interest and then to principal.",
+      "4. Grace period. A payment is considered late if it is not received within " + c.grace + " days after its due date. No late fee is charged under the fund's charter.",
+      "5. Prepayment. The Borrower may pay all or part of the balance early at any time without penalty.",
+      "6. Default. If the Borrower misses payments and does not bring the loan current after written notice, the " + c.approval.toLowerCase() + " may declare the remaining balance due.",
+      "7. Approval. This loan was approved by the " + c.approval.toLowerCase() + (l.decided ? " on " + fmtD(l.decided) : "") + (l.boardNote ? " (" + l.boardNote + ")" : "") + ".",
+      "8. Governing law. This note is governed by the laws of the State of California.",
+      "9. Entire agreement. This note is the entire agreement between the parties. Any change must be in writing and signed by both parties.",
+      "",
+      "Borrower signature: ______________________   Date: __________",
+      "For the Lender: __________________________   Date: __________",
+      "Witness or notary (if your attorney advises): ______________________",
+      "",
+      "Prepared by DOT as a draft for discussion with an attorney. It is not legal advice."
+    ].join("\n");
+  }
+  function cpaReport(year) {
+    const fb = fbank(), y = String(year), inY = fb.ledger.filter((e) => (e.date || "").startsWith(y));
+    const sum = (type) => r2c(inY.filter((e) => e.type === type).reduce((a, e) => a + e.amount, 0));
+    const byB = {};
+    inY.filter((e) => e.type === "repayment").forEach((e) => { const l = fb.loans.find((x) => x.id === e.loanId); const n = l ? l.borrower : "Unknown";
+      byB[n] = byB[n] || { paid: 0, interest: 0 }; byB[n].paid += e.amount; byB[n].interest += e.interest || 0; });
+    const lines = [fb.charter.fundName + " — " + y + " summary for CPA", "",
+      "Contributions: " + money(sum("contribution")), "Loans funded: " + money(sum("loan")), "Repayments received: " + money(sum("repayment")),
+      "Interest received: " + money(r2c(inY.filter((e) => e.type === "repayment").reduce((a, e) => a + (e.interest || 0), 0))), "", "Interest received by borrower:"];
+    Object.keys(byB).forEach((n) => lines.push("- " + n + ": " + money(r2c(byB[n].interest)) + " interest of " + money(r2c(byB[n].paid)) + " paid"));
+    if (!Object.keys(byB).length) lines.push("- none");
+    lines.push("", "Loans (status, rate, balance):");
+    fb.loans.filter((l) => ["active", "paid"].includes(l.status)).forEach((l) => lines.push("- " + l.borrower + " (" + l.rel + "), " + l.purpose + ", " + money(l.amount) + " at " + l.rate + "%, funded " + (l.funded || "—") + ", " + (l.status === "paid" ? "paid off " + l.paidOff : "balance " + money(l.balance))));
+    lines.push("", "IRS minimum rate (AFR) on file: " + (fb.charter.afr ? fb.charter.afr + "% (" + (fb.charter.afrNote || "entered " + fb.charter.afrDate) + ")" : "not entered"));
+    return lines.join("\n");
+  }
+  async function copyText(btn, text, label) { try { await navigator.clipboard.writeText(text); btn.textContent = "Copied"; } catch (e) { btn.textContent = "Copy failed"; } setTimeout(() => (btn.textContent = label), 1800); }
+  function renderFbank() {
+    const box = $("fbBody"); if (!box) return;
+    const fb = fbank(), c = fb.charter, t = fbTotals(); box.innerHTML = "";
+    const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt !== undefined) e.textContent = txt; return e; };
+    const btn = (label, fn, primary) => { const b = el("button", "btn" + (primary ? " primary" : ""), label); b.onclick = fn; return b; };
+    const sum = el("div", "dsum");
+    [[money(t.available), "Available to lend"], [money(t.outstanding), "Out on loan"], [money(t.interest), "Interest earned"]].forEach(([v, k]) => { const d = el("div"); d.append(el("b", "", v), el("small", "", k)); sum.append(d); });
+    box.append(el("strong", "", c.fundName), sum);
+    const al = fbAlerts();
+    if (al.length) { const a = el("div", "tbox"); a.append(el("strong", "", "Payments coming due"));
+      al.forEach(({ l, st }) => { const r = el("div", "sday"); r.append(el("span", "r", l.borrower + " · " + money(l.payment)), el("span", "sc", loanStatusText(st))); if (st.late) r.lastChild.style.color = "var(--alert)"; a.append(r); }); box.append(a); }
+    // contribution
+    const cr = el("div", "addrow"); const ci = el("input"); ci.type = "text"; ci.inputMode = "decimal"; ci.placeholder = "Add money to the fund $";
+    const cf = el("input"); cf.type = "text"; cf.placeholder = "From (optional)";
+    cr.append(ci, cf, btn("Add", () => { const m = applyFbankCommand("FBANK_CONTRIB", ci.value + "|" + cf.value + "|"); if (m) { save(); renderFbank(); note(m); } }, true));
+    box.append(cr);
+    // loans
+    box.append(el("div", "bstage", "Loans"));
+    const order = { requested: 0, approved: 1, active: 2, paid: 3, declined: 4 };
+    if (!fb.loans.length) box.append(el("p", "empty-note", "No loans yet. Add money to the fund, then record a request below or tell DOT."));
+    fb.loans.slice().sort((a, b) => order[a.status] - order[b.status]).forEach((l) => {
+      const card = el("div", "dcard" + (l.status === "paid" ? " paid" : ""));
+      const top = el("div", "dtop"); const nm = el("strong", "", l.borrower);
+      const chip = el("span", "duechip", { requested: "Awaiting board", approved: "Approved", active: "Active", paid: "Paid ✓", declined: "Declined" }[l.status]);
+      const st = loanStatus(l); if (st && st.late) chip.className = "duechip over"; else if (st && (st.inGrace || st.days <= 3)) chip.className = "duechip soon"; else if (l.status === "paid") chip.className = "duechip ok";
+      top.append(nm, chip, el("span", "bal", money(l.status === "active" ? l.balance : l.amount))); card.append(top);
+      card.append(el("div", "dmeta", l.rel + " · " + l.purpose + " · " + money(l.amount) + " at " + l.rate + "% · " + l.term + " × " + money(l.payment) +
+        (l.status === "active" ? " · " + loanStatusText(st) : "") + (l.decided ? " · board " + (l.status === "declined" ? "declined " : "approved ") + l.decided + (l.boardNote ? " (" + l.boardNote + ")" : "") : "")));
+      if (l.status === "active" || l.status === "paid") { const pct = Math.round(((l.amount - l.balance) / l.amount) * 100); const bar = el("div", "bar"); const f = el("i"); f.style.width = pct + "%"; bar.append(f); card.append(bar); }
+      if (["requested", "approved"].includes(l.status)) checkLoan(l).forEach((f) => { const d = el("div", "dmeta", (f.level === "block" ? "⛔ " : "⚠️ ") + f.text); d.style.color = f.level === "block" ? "var(--alert)" : "#f2b84b"; card.append(d); });
+      const act = el("div", "dact");
+      if (l.status === "requested") {
+        act.append(btn("Board approved", () => {
+          const f = checkLoan(l).filter((x) => x.level === "block");
+          if (f.length && !confirm("This request breaks the charter:\n\n" + f.map((x) => "• " + x.text).join("\n") + "\n\nRecord the board's approval anyway?")) return;
+          const n = prompt("Board decision note (optional), such as \"Approved 3–0 on Nov 15\":", ""); if (n === null) return;
+          applyFbankCommand("FBANK_APPROVE", l.id + "|" + n); save(); renderFbank();
+        }, true), btn("Declined", () => { const n = prompt("Reason (optional):", ""); if (n === null) return; applyFbankCommand("FBANK_DECLINE", l.id + "|" + n); save(); renderFbank(); }));
+      }
+      if (l.status === "approved") {
+        const di = el("input"); di.type = "date"; di.value = todayStr(); di.title = "Date the money was sent"; di.style.width = "150px";
+        act.append(di, btn("Mark funded", () => { if (l.amount > fbTotals().available && !confirm("The fund only has " + money(fbTotals().available) + " available. Record this loan anyway?")) return;
+          const m = applyFbankCommand("FBANK_FUND", l.id + "|" + di.value); if (m) { save(); renderFbank(); note(m); } }, true));
+      }
+      if (l.status === "active") {
+        const pi = el("input"); pi.type = "text"; pi.inputMode = "decimal"; pi.placeholder = money(l.payment);
+        act.append(pi, btn("Log payment", () => { const m = applyFbankCommand("FBANK_PAY", l.id + "|" + (pi.value || l.payment)); if (m) { save(); renderFbank(); note(m); } }, true));
+      }
+      const extra = el("div"); extra.style.display = "none";
+      const showExtra = (text, label) => { extra.innerHTML = ""; const pre = el("div", "obody", text); const cb = el("button", "btn", "Copy"); cb.onclick = () => copyText(cb, text, "Copy");
+        extra.append(cb, pre); extra.style.display = extra.dataset.k === label ? "none" : "grid"; extra.dataset.k = extra.style.display === "none" ? "" : label; extra.style.gap = "6px"; };
+      if (l.status !== "declined") act.append(btn("Promissory note", () => showExtra(promissoryNote(l), "note")));
+      if (l.status === "active") act.append(btn("Schedule", () => {
+        const rows = []; let bal = l.balance; const r = l.rate / 1200; const st0 = loanStatus(l); let due = st0 ? st0.due : l.firstDue;
+        for (let i = 0; bal > 0.004 && i < 120; i++) { const int = r2c(bal * r); const pay = Math.min(l.payment, r2c(bal + int)); bal = r2c(bal - (pay - int)); rows.push(fmtD(due) + "   " + money(pay) + "   (interest " + money(int) + ")   balance " + money(bal)); due = addMonths(due, 1); }
+        showExtra("Remaining payments for " + l.borrower + ":\n" + rows.join("\n"), "sched"); }));
+      card.append(act, extra); box.append(card);
+    });
+    // new request form
+    box.append(el("div", "bstage", "New loan request"));
+    const form = el("div", "dadd");
+    const fi = (ph, mode) => { const i = el("input"); i.type = "text"; i.placeholder = ph; if (mode) i.inputMode = mode; return i; };
+    const sel = (opts) => { const s = el("select"); s.style.cssText = "background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px"; opts.forEach((o) => { const op = el("option", "", o); op.value = o; s.append(op); }); return s; };
+    const nB = fi("Borrower's name"); nB.className = "wide"; const sR = sel(FB_RELS), sP = sel(FB_PURPOSES), nA = fi("Amount $ (max " + money(c.maxPerPerson) + ")", "decimal"), nR = fi("Rate % (" + c.rate + ")", "decimal");
+    const nD = el("input"); nD.type = "date"; nD.title = "First payment date (optional; default one month after funding)";
+    const submit = btn("Record request", () => {
+      if (!nB.value.trim() || !(Number(nA.value) > 0)) { alert("Enter the borrower's name and an amount."); return; }
+      const m = applyFbankCommand("FBANK_REQUEST", [nB.value, sR.value, sP.value, nA.value, nR.value, nD.value].join("|"));
+      if (m) { save(); renderFbank(); note(m); }
+    }, true); submit.className += " wide";
+    const dl = el("small", "", "First payment date (optional)"); dl.style.color = "var(--muted)";
+    form.append(nB, sR, sP, nA, nR, dl, nD, submit); box.append(form);
+    // charter
+    const ch = el("details"); const summ = el("summary", "", "Charter and IRS rate"); summ.style.cssText = "cursor:pointer;font-family:var(--display);color:var(--amber)"; ch.append(summ);
+    const cg = el("div", "dadd"); cg.style.marginTop = "10px";
+    const field = (label, key, mode) => { const w = el("div", "field"); const lb = el("label", "", label); const i = el("input"); i.type = "text"; if (mode) i.inputMode = mode; i.value = c[key] ?? "";
+      i.style.cssText = "background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px"; i.onchange = () => { c[key] = mode ? (i.value === "" ? null : Number(i.value)) : i.value; save(); renderFbank(); }; w.append(lb, i); return w; };
+    const fn = field("Fund name", "fundName"); fn.className += " wide";
+    cg.append(fn, field("Max per person $", "maxPerPerson", "decimal"), field("Standard rate %", "rate", "decimal"), field("Rate ceiling %", "maxRate", "decimal"), field("Term (months)", "term", "numeric"),
+      field("Grace period (days)", "grace", "numeric"), field("IRS minimum rate (AFR) %", "afr", "decimal"));
+    const an = field("AFR source and month", "afrNote"); an.className += " wide"; cg.append(an);
+    const tip = el("small", "", "Borrowers: children and their families (child, child's spouse, grandchild) and siblings. Purposes: emergency, education, car, or starting a business. Approval: family board. The AFR changes monthly; ask DOT to look up this month's rate or enter it from irs.gov. DOT keeps records only; it never moves money."); tip.style.color = "var(--muted)"; tip.className = "wide";
+    cg.append(tip); ch.append(cg); box.append(ch);
+    // reports + ledger
+    const rp = el("details"); const rs = el("summary", "", "Reports and ledger"); rs.style.cssText = "cursor:pointer;font-family:var(--display);color:var(--amber)"; rp.append(rs);
+    const rw = el("div"); rw.style.cssText = "display:grid;gap:8px;margin-top:10px";
+    const yr = new Date().getFullYear();
+    [yr, yr - 1].forEach((y) => { const b = el("button", "btn", "Copy " + y + " CPA summary"); b.onclick = () => copyText(b, cpaReport(y), "Copy " + y + " CPA summary"); rw.append(b); });
+    fb.ledger.slice(-15).reverse().forEach((e) => { const r = el("div", "sday"); r.append(el("span", "d", e.date.slice(5)), el("span", "r", e.memo || e.type), el("span", "sc", (e.type === "loan" ? "−" : "+") + money(e.amount))); rw.append(r); });
+    if (!fb.ledger.length) rw.append(el("p", "empty-note", "No ledger entries yet."));
+    rp.append(rw); box.append(rp);
+    const badge = $("fbCount"); if (badge) { const n = al.filter((x) => x.st.late || x.st.inGrace || x.st.days <= 3).length + fb.loans.filter((l) => l.status === "requested").length; badge.textContent = n ? String(n) : ""; }
   }
 
   // ---------- wealth reading path ----------
@@ -1858,7 +2161,7 @@ Use MEMO only for things worth keeping long term. Never read the MEMO line aloud
       `BRIEFING
 When ${name} asks for a briefing, gather everything with your tools first: Helendale weather, his calendar for today if you have a calendar tool, silver prices with his stack, and the top three national news headlines from one web search.
 Then deliver one spoken rundown of about 170 words in this order:
-a short greeting suited to the time of day; the weather now, the high and low, and anything notable; today's schedule, or say his calendar is clear; silver in two sentences covering price and direction, buying window status, and stack progress; his to-do list in one sentence, naming overdue and due-today items and how many others are open; his Bible reading for today in one sentence, including whether he is behind, or on Sunday that it is a rest day; one market sentence from get_stocks for his watchlist, such as how many are up or down and the biggest mover, noting if the market is closed; if a book review is due, mention it in a few words; bills due within 7 days or overdue, from his bills and due dates list, in one sentence with amounts, or say nothing is due this week; three headlines in one sentence each; then close with one short question or suggestion.
+a short greeting suited to the time of day; the weather now, the high and low, and anything notable; today's schedule, or say his calendar is clear; silver in two sentences covering price and direction, buying window status, and stack progress; his to-do list in one sentence, naming overdue and due-today items and how many others are open; his Bible reading for today in one sentence, including whether he is behind, or on Sunday that it is a rest day; one market sentence from get_stocks for his watchlist, such as how many are up or down and the biggest mover, noting if the market is closed; if a book review is due, mention it in a few words; bills due within 7 days or overdue, from his bills and due dates list, in one sentence with amounts, or say nothing is due this week; if any Family Bank payments are due within 7 days, late, or a loan request awaits the board, one sentence on that; three headlines in one sentence each; then close with one short question or suggestion.
 Do not give the full silver report unless he asks for it, and do not state the clock time. If any source is unavailable, say so in a few words and continue with the rest.`,
 
       `SCRIPTURE AND SERMON PREP
@@ -1884,6 +2187,12 @@ When he says an episode is finished, add one final separate line in exactly this
       `TRANSLATOR MODE
 When ${name} asks to start translator mode, or to translate everything he says into a language, confirm in one short sentence and add one final separate line in exactly this form, naming the language in English: TRANSLATE_ON: Spanish
 Never read that line aloud. For a single phrase, such as "how do you say God bless you in Spanish," answer normally with the translation and one short pronunciation tip.`,
+
+      `FAMILY BANK
+${name} runs a family assistance fund that relatives can borrow from at a low rate. The app calculates every figure and checks every rule:
+${fbankForPrompt()}
+Record changes with one final line each: FBANK_CONTRIB: amount | from whom | note; FBANK_REQUEST: borrower | relationship | purpose | amount | rate (leave empty for the standard rate) | first payment date YYYY-MM-DD (optional); FBANK_APPROVE: loan id | board note; FBANK_DECLINE: loan id | note; FBANK_FUND: loan id | date sent YYYY-MM-DD; FBANK_PAY: loan id | amount; FBANK_AFR: rate | source and month.
+Only the family board approves loans: use FBANK_APPROVE or FBANK_DECLINE only when he says the board decided, never on your own judgment. When a request is recorded, the app reports the charter check; repeat its results plainly, including any IRS flags, and suggest asking his CPA when a flag appears. Never calculate payments, schedules, balances, or interest yourself; report them as listed. For the IRS minimum rate (AFR), search irs.gov for the current month's short-term AFR, give the source, and record it only after he confirms. Promissory note drafts and the CPA summary are in the Family Bank panel. This is record-keeping, not legal or tax advice.`,
 
       `WEALTH READING PATH
 ${name} is building a family empire and wants a deep, working understanding of finance, banking, investing, and generational wealth. His reading path, by stage:
@@ -2035,7 +2344,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
       if (stackNew !== null && !isNaN(stackNew)) state.settings.stackOz = stackNew;
       recordSilver(data.metals);
       const listChanges = [];
-      reply = reply.replace(/^\s*(TODO_ADD|TODO_DONE|TODO_UNDONE|TODO_DELETE|NOTE_DELETE|NOTE|DEBT_ADD|DEBT_PAY|DEBT_BALANCE|DEBT_TERMS|DEBT_PLAN|DEBT_DELETE|DEBT_DUE|BILL_ADD|BILL_PAID|BILL_DELETE|BILL_EDIT|STUDY_PLAN|STUDY_THEME|STUDY_READ|STUDY_SCORE|BOOK_ADD|BOOK_START|BOOK_PROGRESS|BOOK_DONE|BOOK_SKIP|BOOK_REMOVE|BOOK_CHECK|BOOK_REVIEWED|PLAYBOOK|TIMER_START|TIMER_STOP|TIMER_ADD):\s*(.*)$/gim, (m, cmd, arg) => {
+      reply = reply.replace(/^\s*(TODO_ADD|TODO_DONE|TODO_UNDONE|TODO_DELETE|NOTE_DELETE|NOTE|DEBT_ADD|DEBT_PAY|DEBT_BALANCE|DEBT_TERMS|DEBT_PLAN|DEBT_DELETE|DEBT_DUE|BILL_ADD|BILL_PAID|BILL_DELETE|BILL_EDIT|FBANK_CONTRIB|FBANK_REQUEST|FBANK_APPROVE|FBANK_DECLINE|FBANK_FUND|FBANK_PAY|FBANK_AFR|STUDY_PLAN|STUDY_THEME|STUDY_READ|STUDY_SCORE|BOOK_ADD|BOOK_START|BOOK_PROGRESS|BOOK_DONE|BOOK_SKIP|BOOK_REMOVE|BOOK_CHECK|BOOK_REVIEWED|PLAYBOOK|TIMER_START|TIMER_STOP|TIMER_ADD):\s*(.*)$/gim, (m, cmd, arg) => {
         const C = cmd.toUpperCase();
         if (C.startsWith("TIMER_")) {
           let tm = null;
@@ -2045,7 +2354,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
           if (tm) listChanges.push(tm);
           return "";
         }
-        const msg = (C === "DEBT_DUE" || C.startsWith("BILL_")) ? applyBillCommand(C, arg.trim()) : C.startsWith("DEBT_") ? applyDebtCommand(C, arg.trim()) : C.startsWith("STUDY_") ? applyStudyCommand(C, arg.trim())
+        const msg = C.startsWith("FBANK_") ? applyFbankCommand(C, arg.trim()) : (C === "DEBT_DUE" || C.startsWith("BILL_")) ? applyBillCommand(C, arg.trim()) : C.startsWith("DEBT_") ? applyDebtCommand(C, arg.trim()) : C.startsWith("STUDY_") ? applyStudyCommand(C, arg.trim())
           : (C.startsWith("BOOK_") || C === "PLAYBOOK") ? applyBookCommand(C, arg.trim()) : applyListCommand(C, arg.trim());
         if (msg) listChanges.push(msg);
         return "";
@@ -2062,7 +2371,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
       memos.forEach((f) => { const p = document.createElement("p"); p.className = "msg memo"; p.textContent = "Saved to memory: " + f; logEl.append(p); });
       epMsgs.forEach((t) => listChanges.push(t));
       listChanges.forEach((t) => { const p = document.createElement("p"); p.className = "msg memo"; p.textContent = t; logEl.append(p); });
-      if (listChanges.length) { renderList(); renderDebts(); dueBadge(); }
+      if (listChanges.length) { renderList(); renderDebts(); dueBadge(); try { renderFbank(); } catch (e) {} }
       scrollDown();
       const spokenPart = splitBlocks(reply).spoken;
       speak(spokenPart || "It is on your screen.");
@@ -2578,6 +2887,10 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
   $("trExit").onclick = () => { state.tr.on = false; save(); renderTrBar(); note("Translator mode off."); };
   $("rTimerStop").onclick = () => { const r = stopTimer(false); if (r) note("Reading timer stopped: " + mins(r.mins) + " logged" + (r.bk ? " for " + r.bk.title : "") + "."); };
   $("rTimerAdd").onclick = () => { if (state.timer) { state.timer.end += 5 * 60000; state.timer.minutes += 5; save(); runTimer(); } };
+  const fbDlg = $("fbDlg");
+  $("fbBtn").onclick = () => { renderFbank(); fbDlg.showModal(); };
+  $("fbClose").onclick = () => fbDlg.close();
+  fbDlg.addEventListener("click", (e) => { if (e.target === fbDlg) fbDlg.close(); });
   const booksDlg = $("booksDlg");
   const showBkTab = (play) => { $("bkPath").style.display = play ? "none" : "grid"; $("bkPlay").style.display = play ? "grid" : "none";
     $("bkTabPath").className = "btn" + (play ? "" : " primary"); $("bkTabPlay").className = "btn" + (play ? " primary" : ""); };
