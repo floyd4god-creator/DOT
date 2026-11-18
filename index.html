@@ -663,8 +663,8 @@
         <div class="field"><label for="sGoal">Goal (oz)</label><input id="sGoal" type="text" inputmode="decimal"></div>
       </div>
       <div class="row">
-        <div class="field"><label for="sWin">Buying window (days)</label><input id="sWin" type="text" placeholder="1-8"></div>
-        <div class="field"><label for="sPrem">Dealer premium ($/oz)</label><input id="sPrem" type="text" inputmode="decimal"></div>
+        <div class="field"><label for="sWin">Buying window (days)</label><input id="sWin" type="text" placeholder="1-8, 15-22"></div>
+        <div class="field"><label for="sPrem">Dealer premium ($/oz)</label><input id="sPrem" type="text" inputmode="decimal" placeholder="4.50"></div>
       </div>
       <label class="check"><input id="sDaily" type="checkbox"> Offer my morning briefing the first time I open DOT each day</label>
       <div class="field">
@@ -1087,13 +1087,19 @@
   let syncing = false, syncTimer = 0, syncAgain = false;
   const saveMeta = () => { try { localStorage.setItem(SKEY, JSON.stringify(syncMeta)); } catch (e) {} };
   const hashStr = (str) => { let h = 5381; for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0; return String(h) + ":" + str.length; };
+  if (!syncMeta.fhash) { // start per-setting change tracking from what this device has now
+    syncMeta.fhash = {}; syncMeta.ftimes = syncMeta.ftimes || {};
+    const v0 = { ...state.settings }; LOCAL_ONLY.forEach((x) => delete v0[x]);
+    Object.keys(v0).forEach((k) => { syncMeta.fhash[k] = hashStr(JSON.stringify(v0[k] ?? null)); if (!syncMeta.ftimes[k]) syncMeta.ftimes[k] = (syncMeta.times && syncMeta.times.settings) || 0; });
+    try { localStorage.setItem(SKEY, JSON.stringify(syncMeta)); } catch (e) {}
+  }
   function sectionValue(k) {
     if (k === "settings") { const o = { ...state.settings }; LOCAL_ONLY.forEach((x) => delete o[x]); return o; }
     if (k === "metals") return loadMetals();
     return state[k] === undefined ? null : state[k];
   }
   function setSection(k, v) {
-    if (k === "settings") { const keep = {}; LOCAL_ONLY.forEach((x) => (keep[x] = state.settings[x])); state.settings = { ...DEFAULTS, ...(v || {}), ...keep }; }
+    if (k === "settings") { const keep = {}; LOCAL_ONLY.forEach((x) => (keep[x] = state.settings[x])); const c = { ...(v || {}) }; if (c.__t) { syncMeta.ftimes = { ...(syncMeta.ftimes || {}), ...c.__t }; delete c.__t; } state.settings = { ...DEFAULTS, ...c, ...keep }; }
     else if (k === "metals") saveMetals(v || {});
     else state[k] = v;
   }
@@ -1107,12 +1113,28 @@
     if (k === "fbank") return !(v.loans || []).length && !(v.ledger || []).length;
     return false;
   }
+  function noteFields(now) {
+    syncMeta.fhash = syncMeta.fhash || {}; syncMeta.ftimes = syncMeta.ftimes || {};
+    const v = sectionValue("settings");
+    Object.keys(v).forEach((k) => { const h = hashStr(JSON.stringify(v[k] ?? null)); if (syncMeta.fhash[k] !== h) { syncMeta.fhash[k] = h; syncMeta.ftimes[k] = now; } });
+  }
+  function mergeSettings(rv, rSecTime) {
+    // Field-by-field: the newest change to each setting wins, so changing one setting on one device never erases another.
+    const rt = (rv && rv.__t) || {}, lt = syncMeta.ftimes || {}, base = syncMeta.times.settings || 0; let changed = false, push = false;
+    Object.keys(rv || {}).forEach((k) => {
+      if (k === "__t" || LOCAL_ONLY.includes(k)) return;
+      const r = k in rt ? rt[k] : (rSecTime || 0), l = k in lt ? lt[k] : base;
+      if (r > l && JSON.stringify(rv[k]) !== JSON.stringify(state.settings[k])) { state.settings[k] = rv[k]; lt[k] = r; changed = true; }
+    });
+    Object.keys(sectionValue("settings")).forEach((k) => { const r = k in rt ? rt[k] : (rSecTime || 0); if ((k in lt ? lt[k] : base) > r && JSON.stringify((rv || {})[k]) !== JSON.stringify(state.settings[k])) push = true; });
+    syncMeta.ftimes = lt; return { changed, push };
+  }
   function noteChanges() {
-    const now = Date.now();
+    const now = Date.now(); noteFields(now);
     SYNC_SECTIONS.forEach((k) => { const h = hashStr(JSON.stringify(sectionValue(k))); if (syncMeta.hashes[k] !== h) { syncMeta.hashes[k] = h; syncMeta.times[k] = now; } });
     saveMeta();
   }
-  function rehash() { SYNC_SECTIONS.forEach((k) => (syncMeta.hashes[k] = hashStr(JSON.stringify(sectionValue(k))))); }
+  function rehash() { SYNC_SECTIONS.forEach((k) => (syncMeta.hashes[k] = hashStr(JSON.stringify(sectionValue(k))))); syncMeta.fhash = {}; const v = sectionValue("settings"); Object.keys(v).forEach((k) => (syncMeta.fhash[k] = hashStr(JSON.stringify(v[k] ?? null)))); }
   function fixIds() {
     let mx = state.nextId || 1;
     const scan = (arr) => (arr || []).forEach((x) => { if (x && x.id >= mx) mx = x.id + 1; });
@@ -1158,6 +1180,11 @@
           let backedUp = false;
           SYNC_SECTIONS.forEach((k) => {
             const lt = syncMeta.times[k] || 0, rt = rs[k] || 0;
+            if (k === "settings" && k in rd) {
+              const r = mergeSettings(rd.settings, rt);
+              if (r.changed) changedLocal = true; if (r.push || lt > rt) pushNeeded = true;
+              syncMeta.times.settings = Math.max(lt, rt); return;
+            }
             if (rt > lt && k in rd) {
               if (GUARDED.includes(k) && isEmptySection(k, rd[k]) && !isEmptySection(k, sectionValue(k))) {
                 syncMeta.times[k] = Date.now(); pushNeeded = true; return; // never let an empty copy erase real information
@@ -1172,6 +1199,7 @@
         if (!pushNeeded) { syncMeta.rev = remote.rev || 0; break; }
         const data = {}, sections = {};
         SYNC_SECTIONS.forEach((k) => { data[k] = sectionValue(k); sections[k] = syncMeta.times[k] || 0; });
+        data.settings = { ...data.settings, __t: { ...(syncMeta.ftimes || {}) } };
         const put = await syncPost({ action: "sync_put", baseRev: remote.rev || 0, data, sections });
         if (put.conflict) { await new Promise((r) => setTimeout(r, 600)); continue; }
         syncMeta.rev = put.rev || 0; break;
@@ -1450,6 +1478,32 @@
       row.append(a, r, ok, scE, mark); list.append(row);
     });
     box.append(ttl, sum, bar, btns, list);
+  }
+
+  // ---------- silver buying windows and premium ----------
+  function parseWindows(text) {
+    const t = String(text || ""), out = [], re = /(\d{1,2})(?:st|nd|rd|th)?\s*(?:-|–|—|to|through|thru|until)\s*(?:the\s+)?(\d{1,2})(?:st|nd|rd|th)?/gi; let r;
+    while ((r = re.exec(t))) { const a = +r[1], b = +r[2]; if (a >= 1 && b <= 31 && a <= b) out.push([a, b]); }
+    return out.sort((x, y) => x[0] - y[0]);
+  }
+  const windowsText = (ws) => ws.map((w) => w[0] + "-" + w[1]).join(", ");
+  const windowsSpoken = (ws) => { const o = (n) => ordinal(n); const parts = ws.map((w) => "the " + o(w[0]) + " through the " + o(w[1])); return parts.length > 1 ? parts.slice(0, -1).join(", ") + " and " + parts.at(-1) : parts[0] || ""; };
+  function windowStatus(spec, d) {
+    const ws = parseWindows(spec); if (!ws.length) return "No buying window set.";
+    d = d || new Date(); const y = d.getFullYear(), m = d.getMonth(), day = d.getDate(), dim = (yy, mm) => new Date(yy, mm + 1, 0).getDate();
+    const f = (yy, mm, dd) => new Date(yy, mm, Math.min(dd, dim(yy, mm))).toLocaleDateString("en-US", { month: "long", day: "numeric" });
+    const cur = ws.find(([a, b]) => day >= a && day <= Math.min(b, dim(y, m)));
+    if (cur) return "OPEN now, through " + f(y, m, cur[1]) + ".";
+    const nx = ws.find(([a]) => a > day && a <= dim(y, m));
+    return "CLOSED. Next window opens " + (nx ? f(y, m, nx[0]) : f(y, m + 1, ws[0][0])) + ".";
+  }
+  const parseAmount = (v) => { const m = String(v ?? "").replace(/,/g, "").match(/\d*\.?\d+/); return m ? Number(m[0]) : null; };
+  function applySilverCommand(cmd, arg) {
+    const s = state.settings;
+    if (cmd === "SILVER_WINDOW") { const ws = parseWindows(arg); if (!ws.length) return null; s.buyWindow = windowsText(ws); return "Buying windows set: days " + s.buyWindow + " of each month. " + windowStatus(s.buyWindow); }
+    if (cmd === "SILVER_PREMIUM") { const n = parseAmount(arg); if (n === null || n > 1000) return null; s.premium = n; return "Dealer premium set to " + money(n) + " per ounce"; }
+    if (cmd === "SILVER_GOAL") { const n = parseAmount(arg); if (!n) return null; s.stackGoal = n; return "Silver goal set to " + n + " oz"; }
+    return null;
   }
 
   // ---------- birthdays and anniversaries ----------
@@ -2476,7 +2530,8 @@ The starting balance field is optional; include it only when he gives one, so pr
 Report balances, totals, percentages, and payoff dates exactly as listed above. Never calculate your own payoff dates, interest, or what-if results. If he asks a what-if, such as paying more each month, record it with DEBT_PLAN and tell him the new estimate will appear on screen. You may explain the avalanche method (highest interest rate first) and snowball method (smallest balance first) and say which debt each would target, using the list above. Celebrate paid-off debts briefly. This is tracking help, not financial advice.`,
 
       `SILVER STACK
-${name} currently holds ${s.stackOz} ounces of silver toward a goal of ${s.stackGoal} ounces. His buying window is days ${s.buyWindow || "not set"} of each month.
+${name} currently holds ${s.stackOz} ounces of silver toward a goal of ${s.stackGoal} ounces. ${parseWindows(s.buyWindow).length ? "He has " + (parseWindows(s.buyWindow).length === 1 ? "one buying window" : parseWindows(s.buyWindow).length + " buying windows") + " each month: " + windowsSpoken(parseWindows(s.buyWindow)) + "." : "No buying window is set."} Buying window status right now, calculated by the app: ${windowStatus(s.buyWindow)} Use this status, not your own date math. His dealer premium estimate is ${s.premium ? money(s.premium) + " per ounce over spot" : "not set"}.
+When he changes his settings, add one final separate line for each: SILVER_WINDOW: day ranges, such as 1-8, 15-22 (list every window he wants, since this replaces the old ones); SILVER_PREMIUM: dollars per ounce, such as 4.50; SILVER_GOAL: ounces. Never read these lines aloud.
 When he reports buying silver or gives a new total, confirm it and add one final separate line in exactly this form, with the new total in ounces:
 STACK: 34
 Never read the STACK line aloud or mention it; the system removes it and updates his holdings. Do not also write a MEMO for silver holdings.`,
@@ -2543,7 +2598,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Access-Code": s.accessCode || "" },
         body: JSON.stringify({ system: systemPrompt(), messages, attachments: atts, prior_silver: priorSilver(),
-          stack: { holdings: s.stackOz, goal: s.stackGoal, window: s.buyWindow, premium: s.premium },
+          stack: { holdings: s.stackOz, goal: s.stackGoal, window: s.buyWindow, premium: s.premium, window_status: windowStatus(s.buyWindow) },
           watchlist: String(s.watchlist || "").split(/[,\s]+/).filter(Boolean), shares: s.shares || {} })
       });
       let data = {};
@@ -2565,7 +2620,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
       if (stackNew !== null && !isNaN(stackNew)) state.settings.stackOz = stackNew;
       recordSilver(data.metals);
       const listChanges = [];
-      reply = reply.replace(/^\s*(TODO_ADD|TODO_DONE|TODO_UNDONE|TODO_DELETE|NOTE_DELETE|NOTE|DEBT_ADD|DEBT_PAY|DEBT_BALANCE|DEBT_TERMS|DEBT_PLAN|DEBT_DELETE|DEBT_DUE|BILL_ADD|BILL_PAID|BILL_DELETE|BILL_EDIT|FBANK_CONTRIB|FBANK_REQUEST|FBANK_APPROVE|FBANK_DECLINE|FBANK_FUND|FBANK_PAY|FBANK_AFR|DATE_ADD|DATE_EDIT|DATE_DELETE|DATE_LEAD|STUDY_PLAN|STUDY_THEME|STUDY_READ|STUDY_SCORE|BOOK_ADD|BOOK_START|BOOK_PROGRESS|BOOK_DONE|BOOK_SKIP|BOOK_REMOVE|BOOK_CHECK|BOOK_REVIEWED|PLAYBOOK|TIMER_START|TIMER_STOP|TIMER_ADD):\s*(.*)$/gim, (m, cmd, arg) => {
+      reply = reply.replace(/^\s*(TODO_ADD|TODO_DONE|TODO_UNDONE|TODO_DELETE|NOTE_DELETE|NOTE|DEBT_ADD|DEBT_PAY|DEBT_BALANCE|DEBT_TERMS|DEBT_PLAN|DEBT_DELETE|DEBT_DUE|BILL_ADD|BILL_PAID|BILL_DELETE|BILL_EDIT|FBANK_CONTRIB|FBANK_REQUEST|FBANK_APPROVE|FBANK_DECLINE|FBANK_FUND|FBANK_PAY|FBANK_AFR|DATE_ADD|DATE_EDIT|DATE_DELETE|DATE_LEAD|SILVER_WINDOW|SILVER_PREMIUM|SILVER_GOAL|STUDY_PLAN|STUDY_THEME|STUDY_READ|STUDY_SCORE|BOOK_ADD|BOOK_START|BOOK_PROGRESS|BOOK_DONE|BOOK_SKIP|BOOK_REMOVE|BOOK_CHECK|BOOK_REVIEWED|PLAYBOOK|TIMER_START|TIMER_STOP|TIMER_ADD):\s*(.*)$/gim, (m, cmd, arg) => {
         const C = cmd.toUpperCase();
         if (C.startsWith("TIMER_")) {
           let tm = null;
@@ -2575,7 +2630,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
           if (tm) listChanges.push(tm);
           return "";
         }
-        const msg = C.startsWith("DATE_") ? applyDateCommand(C, arg.trim()) : C.startsWith("FBANK_") ? applyFbankCommand(C, arg.trim()) : (C === "DEBT_DUE" || C.startsWith("BILL_")) ? applyBillCommand(C, arg.trim()) : C.startsWith("DEBT_") ? applyDebtCommand(C, arg.trim()) : C.startsWith("STUDY_") ? applyStudyCommand(C, arg.trim())
+        const msg = C.startsWith("SILVER_") ? applySilverCommand(C, arg.trim()) : C.startsWith("DATE_") ? applyDateCommand(C, arg.trim()) : C.startsWith("FBANK_") ? applyFbankCommand(C, arg.trim()) : (C === "DEBT_DUE" || C.startsWith("BILL_")) ? applyBillCommand(C, arg.trim()) : C.startsWith("DEBT_") ? applyDebtCommand(C, arg.trim()) : C.startsWith("STUDY_") ? applyStudyCommand(C, arg.trim())
           : (C.startsWith("BOOK_") || C === "PLAYBOOK") ? applyBookCommand(C, arg.trim()) : applyListCommand(C, arg.trim());
         if (msg) listChanges.push(msg);
         return "";
@@ -3062,7 +3117,15 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
     fillBackups();
     if (!s.syncOn) syncStatus("Off on this device."); $("sPalette").value = s.palette; $("sBible").value = s.bible; $("sEpisodes").value = s.episodes || "";
     loadVoices();
+    formSnap = readForm();
     if (!dlg.open) dlg.showModal();
+  }
+  // Apply only the fields changed in the form, so a stale form never overwrites updates synced from another device.
+  let formSnap = null;
+  function formChanges() {
+    const f = readForm(); if (!formSnap) return f;
+    const out = {}; Object.keys(f).forEach((k) => { if (JSON.stringify(f[k]) !== JSON.stringify(formSnap[k])) out[k] = f[k]; });
+    formSnap = f; return out;
   }
   function readForm() {
     return {
@@ -3079,8 +3142,8 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
       convo: $("sConvo").checked,
       stackOz: Number($("sOz").value) || 0,
       stackGoal: Number($("sGoal").value) || 200,
-      buyWindow: $("sWin").value.trim(),
-      premium: Number($("sPrem").value) || 0,
+      buyWindow: (() => { const v = $("sWin").value.trim(), ws = parseWindows(v); return ws.length ? windowsText(ws) : v; })(),
+      premium: (() => { const v = $("sPrem").value.trim(); if (!v) return 0; const n = parseAmount(v); return n === null ? state.settings.premium : n; })(),
       dailyReport: $("sDaily").checked,
       tone: Number($("sTone").value), humor: Number($("sHumor").value), length: Number($("sLength").value), followups: Number($("sFollow").value),
       mission: $("sMission").checked, signoff: $("sSignoff").checked, syncOn: $("sSync").checked,
@@ -3092,14 +3155,14 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
   $("openSettings").onclick = openSettings;
   $("bkLoad").onclick = async () => { try { const d = await syncPost({ action: "sync_backups" }); fillBackups(d.backups || []); } catch (e) { alert("Couldn’t load cloud backups: " + e.message); } };
   $("bkRestore").onclick = restoreSelected;
-  $("syncNowBtn").onclick = () => { state.settings = { ...state.settings, ...readForm() }; writeLocal(); syncStatus("Syncing…"); syncNow(true); };
+  $("syncNowBtn").onclick = () => { state.settings = { ...state.settings, ...formChanges() }; writeLocal(); syncStatus("Syncing…"); syncNow(true); };
   $("sTone").oninput = persLabels; $("sHumor").oninput = persLabels;
   $("pPresets").querySelectorAll("button").forEach((btn) => btn.onclick = () => {
     const p = PRESETS[btn.dataset.p]; $("sTone").value = p.tone; $("sHumor").value = p.humor; $("sLength").value = p.length;
     $("sFollow").value = p.followups; $("sMission").checked = p.mission; $("sSignoff").checked = p.signoff; persLabels();
   });
   $("pTry").onclick = () => {
-    state.settings = { ...state.settings, ...readForm() }; save(); dlg.close(); render();
+    state.settings = { ...state.settings, ...formChanges() }; save(); dlg.close(); render();
     unlockSpeech(); lastInputVoice = false;
     ask("Personality check: in two or three sentences, tell me how you'll talk with me now.");
   };
@@ -3164,7 +3227,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
   $("todoIn").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addTodo(); } });
   $("noteIn").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addNote(); } });
   $("clearDone").onclick = () => { state.todos = state.todos.filter((t) => !t.done); save(); renderList(); };
-  $("saveBtn").onclick = () => { state.settings = { ...state.settings, ...readForm() }; save(); dlg.close(); render(); };
+  $("saveBtn").onclick = () => { state.settings = { ...state.settings, ...formChanges() }; save(); dlg.close(); render(); };
   $("saveBtn").addEventListener("click", () => { if (state.settings.syncOn) setTimeout(() => syncNow(false), 300); });
   $("testVoice").onclick = () => { unlockSpeech(); const f = readForm(); speak(`DOT online. Standing by, ${f.callsign}.`, { ...f, autoSpeak: true }); };
   $("clearBtn").onclick = () => {
