@@ -78,6 +78,9 @@
     }
   }
   header, main, footer { position: relative; z-index: 1; }
+  body { grid-template-columns: minmax(0, 1fr); }
+  header > span { min-width: 0; }
+  header .brand { flex: none; }
   button, input, select, textarea { font: inherit; color: inherit; }
   :focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; }
 
@@ -162,9 +165,27 @@
   .due.today { color: var(--amber); border-color: var(--amber); }
   .del { background: transparent; border: 0; color: var(--muted); font-size: 1.3rem; line-height: 1; cursor: pointer; padding: 4px 6px; }
   .addrow { display: flex; gap: 8px; }
+  #dtBody { grid-template-columns: minmax(0, 1fr); }
+  #dtBody > *, #dtBody input, #dtBody select, #dtBody button, #dtBody textarea { min-width: 0; }
+  #dtBody .addrow { flex-wrap: wrap; }
+  #dtBody .addrow > input, #dtBody .addrow > select { flex: 1 1 150px; }
+  #dtBody select { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  @media (max-width: 520px) { .dtrow { flex-wrap: wrap; } .dtrow .dtmid { flex: 1 1 60%; } .dtrow .duechip { min-width: 0; } }
+  #dtBody textarea { width: 100%; box-sizing: border-box; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 10px; font: inherit; margin: 8px 0; }
+  #dtBody summary { cursor: pointer; font-family: var(--display); color: var(--amber); }
+  #dtBody details[open] { display: grid; gap: 8px; }
+  .dtrow { display: flex; align-items: center; gap: 10px; padding: 8px 2px; border-bottom: 1px solid var(--line); }
+  .dtrow .duechip { flex: none; min-width: 74px; text-align: center; }
+  .dtmid { flex: 1; display: grid; gap: 2px; min-width: 0; }
+  .dtmid small { color: var(--muted); font-size: .8rem; }
+  .dtrow .btn { padding: 7px 10px; font-size: .82rem; flex: none; }
+  .dtmonth { font: 600 .78rem var(--display); color: var(--muted); letter-spacing: .08em; text-transform: uppercase; margin-top: 8px; }
+  .dtform { display: grid; gap: 8px; }
   .addrow input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
   .empty-note { color: var(--muted); font-size: .9rem; margin: 4px 0; }
-  @media (max-width: 860px) { header .brief-btn span { display: none; } header .brief-btn { padding: 0; width: 44px; justify-content: center; } }
+  @media (min-width: 1001px) and (max-width: 1240px) { header > span { gap: 6px !important; } header .brief-btn { padding: 0 10px 0 9px; font-size: .92rem; gap: 5px; } }
+  @media (max-width: 600px) { header > span { overflow-x: auto; min-width: 0; gap: 6px !important; margin-left: 10px; scrollbar-width: none; padding: 2px 0; } header > span::-webkit-scrollbar { display: none; } header > span > button { flex: none; width: 40px !important; height: 40px; } }
+  @media (max-width: 1000px) { header .brief-btn span { display: none; } header .brief-btn { padding: 0; width: 44px; justify-content: center; } }
   @media (max-width: 420px) { .brief-btn span { display: none; } .brief-btn { padding: 0; width: 44px; justify-content: center; } }
 
   main { display: grid; grid-template-rows: auto 1fr; gap: 8px; min-height: 0; }
@@ -290,6 +311,10 @@
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10l9-6 9 6"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8"/><path d="M3 20h18"/></svg>
       <span>Bank</span><b class="count" id="fbCount"></b>
     </button>
+    <button class="icon-btn brief-btn" id="dtBtn" aria-label="Birthdays and anniversaries">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21h16"/><path d="M5 21v-7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v7"/><path d="M5 16c1.5 1 3 1 4.5 0s3-1 4.5 0 3 1 5 0"/><path d="M12 12V8"/><path d="M12 5.5c.8-.8.8-1.7 0-2.5-.8.8-.8 1.7 0 2.5z"/></svg>
+      <span>Dates</span><b class="count" id="dtCount"></b>
+    </button>
     <button class="icon-btn brief-btn" id="booksBtn" aria-label="Wealth reading path">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5a1 1 0 0 1 1-1h3v15H5a1 1 0 0 1-1-1z"/><path d="M8 4h4v15H8z"/><path d="M13.5 5.2l3.4-.9 3.6 13.6-3.4.9z"/></svg>
       <span>Books</span>
@@ -409,6 +434,14 @@
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1"/><path d="M12 18v4"/></svg>
     </button>
   </footer>
+
+  <dialog id="dtDlg">
+    <div class="sheet">
+      <h2 tabindex="-1" autofocus style="outline:none">Birthdays &amp; Anniversaries</h2>
+      <div id="dtBody" style="display:grid;gap:10px"></div>
+      <div class="actions"><span></span><button class="btn primary" id="dtClose">Close</button></div>
+    </div>
+  </dialog>
 
   <dialog id="fbDlg">
     <div class="sheet">
@@ -662,9 +695,9 @@
     try {
       const s = JSON.parse(localStorage.getItem(KEY));
       if (s) return { settings: { ...DEFAULTS, ...s.settings }, history: Array.isArray(s.history) ? s.history : [],
-        todos: Array.isArray(s.todos) ? s.todos : [], qnotes: Array.isArray(s.qnotes) ? s.qnotes : [], debts: Array.isArray(s.debts) ? s.debts : [], bills: Array.isArray(s.bills) ? s.bills : [], nextId: s.nextId || 1, tr: s.tr || { on: false, lang: "Spanish" }, study: s.study || null, books: s.books || null, fbank: s.fbank || null };
+        todos: Array.isArray(s.todos) ? s.todos : [], qnotes: Array.isArray(s.qnotes) ? s.qnotes : [], debts: Array.isArray(s.debts) ? s.debts : [], bills: Array.isArray(s.bills) ? s.bills : [], nextId: s.nextId || 1, tr: s.tr || { on: false, lang: "Spanish" }, study: s.study || null, books: s.books || null, fbank: s.fbank || null, dates: s.dates || null };
     } catch (e) {}
-    return { settings: { ...DEFAULTS }, history: [], todos: [], qnotes: [], debts: [], bills: [], nextId: 1, tr: { on: false, lang: "Spanish" }, study: null, books: null, fbank: null };
+    return { settings: { ...DEFAULTS }, history: [], todos: [], qnotes: [], debts: [], bills: [], nextId: 1, tr: { on: false, lang: "Spanish" }, study: null, books: null, fbank: null, dates: null };
   }
   let state = load();
   function writeLocal() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
@@ -684,7 +717,7 @@
     }
   }
   function maybeBackup() { const l = loadBackups(); if (!l.length || Date.now() - l[l.length - 1].t > 30 * 60000) backupNow("auto"); }
-  function save() { writeLocal(); try { maybeBackup(); } catch (e) {} try { scheduleSync(); } catch (e) {} }
+  function save() { writeLocal(); try { dateBadge(); } catch (e) {} try { maybeBackup(); } catch (e) {} try { scheduleSync(); } catch (e) {} }
 
   // ---------- to-do list & notes ----------
   const fmtDue = (d) => { const [y, m, dd] = d.split("-").map(Number); return new Date(y, m - 1, dd).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }); };
@@ -1047,7 +1080,7 @@
   }
 
   // ---------- sync between devices ----------
-  const SYNC_SECTIONS = ["settings", "history", "todos", "qnotes", "debts", "bills", "study", "books", "fbank", "tr", "metals"];
+  const SYNC_SECTIONS = ["settings", "history", "todos", "qnotes", "debts", "bills", "study", "books", "fbank", "dates", "tr", "metals"];
   const LOCAL_ONLY = ["workerUrl", "accessCode", "voiceURI", "syncOn"];
   const SKEY = "dot.sync";
   let syncMeta = (() => { try { return JSON.parse(localStorage.getItem(SKEY)) || null; } catch (e) { return null; } })() || { times: {}, hashes: {}, rev: 0, lastSync: 0 };
@@ -1064,12 +1097,13 @@
     else if (k === "metals") saveMetals(v || {});
     else state[k] = v;
   }
-  const GUARDED = ["debts", "bills", "todos", "qnotes", "study", "books", "fbank"];
+  const GUARDED = ["debts", "bills", "todos", "qnotes", "study", "books", "fbank", "dates"];
   function isEmptySection(k, v) {
     if (v === null || v === undefined) return true;
     if (Array.isArray(v)) return v.length === 0;
     if (k === "books") return !v.list || !v.list.length;
     if (k === "study") return !v.days || !v.days.length;
+    if (k === "dates") return !(v.items || []).length;
     if (k === "fbank") return !(v.loans || []).length && !(v.ledger || []).length;
     return false;
   }
@@ -1082,7 +1116,7 @@
   function fixIds() {
     let mx = state.nextId || 1;
     const scan = (arr) => (arr || []).forEach((x) => { if (x && x.id >= mx) mx = x.id + 1; });
-    scan(state.todos); scan(state.qnotes); scan(state.debts); scan(state.bills); if (state.fbank) { scan(state.fbank.loans); scan(state.fbank.ledger); } if (state.books) { scan(state.books.list); scan(state.books.playbook); }
+    scan(state.todos); scan(state.qnotes); scan(state.debts); scan(state.bills); if (state.fbank) { scan(state.fbank.loans); scan(state.fbank.ledger); } if (state.dates) scan(state.dates.items); if (state.books) { scan(state.books.list); scan(state.books.playbook); }
     state.nextId = mx;
   }
   function syncStatus(msg) { const el = $("syncStatus"); if (el) el.textContent = msg; }
@@ -1181,9 +1215,9 @@
     if (!src) { alert("That backup is empty."); return; }
     if (!confirm("Restore this backup?\n\n" + (describe(src) || "") + "\n\nYour current lists, debts, Bible plan, and reading path will be replaced. A copy of what you have now is saved first.")) return;
     backupNow("before restore");
-    ["todos", "qnotes", "debts", "bills", "study", "books", "fbank"].forEach((k) => { if (k in src) state[k] = src[k]; });
+    ["todos", "qnotes", "debts", "bills", "study", "books", "fbank", "dates"].forEach((k) => { if (k in src) state[k] = src[k]; });
     fixIds(); writeLocal();
-    if (state.settings.syncOn) { const now = Date.now(); ["todos", "qnotes", "debts", "bills", "study", "books", "fbank"].forEach((k) => { syncMeta.times[k] = now; }); rehash(); saveMeta(); syncNow(false); }
+    if (state.settings.syncOn) { const now = Date.now(); ["todos", "qnotes", "debts", "bills", "study", "books", "fbank", "dates"].forEach((k) => { syncMeta.times[k] = now; }); rehash(); saveMeta(); syncNow(false); }
     refreshAll(); note("Backup restored: " + describe(src) + ".");
     fillBackups();
   }
@@ -1416,6 +1450,187 @@
       row.append(a, r, ok, scE, mark); list.append(row);
     });
     box.append(ttl, sum, bar, btns, list);
+  }
+
+  // ---------- birthdays and anniversaries ----------
+  const DT_TYPES = ["Birthday", "Anniversary", "Other"];
+  const DT_GROUPS = ["Family", "Church", "Friend", "Other"];
+  const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  function dates() {
+    if (!state.dates) state.dates = { lead: 3, items: [] };
+    if (!Array.isArray(state.dates.items)) state.dates.items = [];
+    return state.dates;
+  }
+  const mapPick = (v, list, dflt) => { const t = String(v || "").trim().toLowerCase(); if (!t) return dflt;
+    if (/anniv|wedding|married/.test(t) && list.includes("Anniversary")) return "Anniversary";
+    if (/birth|bday|b-day/.test(t) && list.includes("Birthday")) return "Birthday";
+    if (/church|member|congreg|trinity|deacon|elder|minist/.test(t) && list.includes("Church")) return "Church";
+    if (/family|son|daughter|wife|husband|brother|sister|mother|father|mom|dad|grand|aunt|uncle|cousin|niece|nephew|in-law/.test(t) && list.includes("Family")) return "Family";
+    if (/friend/.test(t) && list.includes("Friend")) return "Friend";
+    return list.find((x) => x.toLowerCase() === t) || dflt; };
+  const daysInMonth = (m, y) => new Date(y || 2024, m, 0).getDate();
+  function parseDateArg(s) {
+    let t = String(s || "").trim().replace(/(\d)(st|nd|rd|th)\b/gi, "$1"); if (!t) return null;
+    let m, d, y = null, r;
+    if ((r = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))) { y = +r[1]; m = +r[2]; d = +r[3]; }
+    else if ((r = t.match(/^(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{2,4}))?$/))) { m = +r[1]; d = +r[2]; if (r[3]) y = +r[3] < 100 ? (+r[3] > (new Date().getFullYear() % 100) ? 1900 : 2000) + +r[3] : +r[3]; }
+    else if ((r = t.match(/^([a-z]+)\.?\s+(\d{1,2}),?(?:\s+(\d{4}))?$/i))) { const i = MONTHS.findIndex((x) => x.toLowerCase().startsWith(r[1].toLowerCase().slice(0, 3))); if (i < 0) return null; m = i + 1; d = +r[2]; if (r[3]) y = +r[3]; }
+    else if ((r = t.match(/^(\d{1,2})\s+([a-z]+)\.?,?(?:\s+(\d{4}))?$/i))) { const i = MONTHS.findIndex((x) => x.toLowerCase().startsWith(r[2].toLowerCase().slice(0, 3))); if (i < 0) return null; m = i + 1; d = +r[1]; if (r[3]) y = +r[3]; }
+    else return null;
+    if (!(m >= 1 && m <= 12) || !(d >= 1 && d <= daysInMonth(m, 2024))) return null;
+    if (y !== null && (y < 1880 || y > new Date().getFullYear() + 1 || d > daysInMonth(m, y))) return null;
+    return { md: String(m).padStart(2, "0") + "-" + String(d).padStart(2, "0"), year: y };
+  }
+  const mdText = (it) => { const [m, d] = it.md.split("-").map(Number); return MONTHS[m - 1] + " " + d + (it.year ? ", " + it.year : ""); };
+  function nextOcc(it, fromStr) {
+    const from = parseYmd(fromStr || todayStr()), [m, d] = it.md.split("-").map(Number);
+    const at = (y) => new Date(y, m - 1, Math.min(d, daysInMonth(m, y)));
+    let y = from.getFullYear(), dt = at(y); if (dt < from) { y++; dt = at(y); }
+    const days = Math.round((dt - from) / 86400000);
+    return { date: ymd(dt), days, years: it.year ? y - it.year : null, shifted: d === 29 && m === 2 && dt.getDate() === 28 };
+  }
+  const ordinal = (n) => { const s = ["th", "st", "nd", "rd"], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
+  function occWhat(it, o) {
+    if (it.type === "Birthday") return "birthday" + (o.years !== null && o.years > 0 ? " (turns " + o.years + ")" : "");
+    if (it.type === "Anniversary") return (o.years !== null && o.years > 0 ? ordinal(o.years) + " " : "") + "anniversary";
+    return it.note || "special day";
+  }
+  function whenText(o) {
+    if (o.days === 0) return "today";
+    if (o.days === 1) return "tomorrow";
+    const wd = parseYmd(o.date).toLocaleDateString("en-US", { weekday: "long" });
+    return (o.days < 7 ? wd + ", " + parseYmd(o.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : fmtShort(o.date)) + " (in " + o.days + " days)";
+  }
+  const fmtShort = (s) => parseYmd(s).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  const possessive = (n) => /s$/i.test(n) ? n + "'" : n + "'s";
+  function upcomingDates(within) {
+    return dates().items.map((it) => ({ it, o: nextOcc(it) })).filter((x) => x.o.days <= within).sort((a, b) => a.o.days - b.o.days || a.it.name.localeCompare(b.it.name));
+  }
+  function findDate(arg, type) {
+    const list = dates().items, t = String(arg || "").trim(); if (!t) return null;
+    const pool = type ? list.filter((x) => x.type === type) : list;
+    return findItem(pool, t) || (pool !== list ? findItem(list, t) : null);
+  }
+  function applyDateCommand(cmd, arg) {
+    const D = dates(), p = String(arg || "").split("|").map((x) => x.trim());
+    if (cmd === "DATE_LEAD") { const n = Math.round(num(p[0])); if (!(n >= 0 && n <= 30)) return null; D.lead = n; return "Birthday and anniversary heads-up set to " + n + " day" + (n === 1 ? "" : "s") + " ahead"; }
+    if (cmd === "DATE_DELETE") { const it = findDate(p[0], p[1] ? mapPick(p[1], DT_TYPES, null) : null); if (!it) return null; D.items = D.items.filter((x) => x !== it); return "Removed " + possessive(it.name) + " " + it.type.toLowerCase(); }
+    if (cmd === "DATE_ADD") {
+      const name = p[0], type = mapPick(p[1], DT_TYPES, "Birthday"), dt = parseDateArg(p[2]); if (!name || !dt) return null;
+      const group = mapPick(p[3], DT_GROUPS, "Other"), noteTxt = p[4] || "";
+      let it = D.items.find((x) => sameName(x.name, name) && x.type === type), upd = !!it;
+      if (!it) { it = { id: state.nextId++, name, type }; D.items.push(it); }
+      Object.assign(it, { md: dt.md, year: dt.year ?? (upd ? it.year : null), group: p[3] ? group : (it.group || group) }); if (noteTxt || !upd) it.note = noteTxt || it.note || "";
+      const o = nextOcc(it);
+      return (upd ? "Updated " : "Saved ") + possessive(it.name) + " " + it.type.toLowerCase() + ": " + mdText(it) + " (" + it.group + "). Next: " + occWhat(it, o) + " " + whenText(o);
+    }
+    if (cmd === "DATE_EDIT") {
+      const it = findDate(p[0]); if (!it) return null;
+      if (p[1]) it.name = p[1]; if (p[2]) it.type = mapPick(p[2], DT_TYPES, it.type);
+      if (p[3]) { const dt = parseDateArg(p[3]); if (!dt) return null; it.md = dt.md; if (dt.year) it.year = dt.year; }
+      if (p[4]) it.group = mapPick(p[4], DT_GROUPS, it.group); if (p[5]) it.note = p[5] === "-" ? "" : p[5];
+      const o = nextOcc(it); return "Updated " + possessive(it.name) + " " + it.type.toLowerCase() + ": " + mdText(it) + ". Next: " + whenText(o);
+    }
+    return null;
+  }
+  function datesForPrompt() {
+    const D = dates(), up = upcomingDates(30);
+    const lines = ["Heads-up setting: " + D.lead + " day" + (D.lead === 1 ? "" : "s") + " ahead. Saved dates: " + D.items.length + "."];
+    lines.push("Coming up in the next 30 days (calculated by the app):", up.length ? up.map(({ it, o }) => "- #" + it.id + " " + possessive(it.name) + " " + occWhat(it, o) + ", " + whenText(o) + " [" + it.group + "]" + (it.note ? " — " + it.note : "") + (o.shifted ? " (Feb 29 date, observed Feb 28 this year)" : "")).join("\n") : "- nothing in the next 30 days");
+    if (D.items.length) {
+      const all = D.items.slice().sort((a, b) => a.md.localeCompare(b.md)).slice(0, 300);
+      lines.push("Full list (year shown only when known):", all.map((it) => "#" + it.id + " " + it.name + " — " + it.type + " " + mdText(it) + " [" + it.group + "]" + (it.note ? " — " + it.note : "")).join("\n"));
+    }
+    return lines.join("\n");
+  }
+  function dateBadge() { const b = $("dtCount"); if (b) { const n = upcomingDates(dates().lead).length; b.textContent = n ? String(n) : ""; } }
+  function dateAlertOnOpen() {
+    dateBadge();
+    const up = upcomingDates(dates().lead); if (!up.length) return;
+    try { if (localStorage.getItem("dot.dateAlert") === todayStr()) return; localStorage.setItem("dot.dateAlert", todayStr()); } catch (e) {}
+    note("🎂 Coming up: " + up.map(({ it, o }) => possessive(it.name) + " " + occWhat(it, o) + " " + whenText(o)).join("; ") + ".");
+  }
+  function parseBulk(text) {
+    const ok = [], bad = [];
+    String(text || "").split(/\n+/).map((l) => l.trim()).filter(Boolean).forEach((line) => {
+      const parts = line.split(/\s*[,\t;|]\s*/);
+      let di = -1, dt = null;
+      for (let i = 1; i < parts.length && !dt; i++) { dt = parseDateArg(parts[i]); if (!dt && parts[i + 1] && /^\d{4}$/.test(parts[i + 1])) { dt = parseDateArg(parts[i] + " " + parts[i + 1]); if (dt) { parts.splice(i + 1, 1); } } if (dt) di = i; }
+      if (!dt || di < 1) { bad.push(line); return; }
+      const name = parts.slice(0, di).join(", "), rest = parts.slice(di + 1);
+      const type = rest.map((x) => mapPick(x, DT_TYPES, null)).find(Boolean) || "Birthday";
+      const group = rest.map((x) => mapPick(x, DT_GROUPS, null)).find(Boolean) || "";
+      ok.push(applyDateCommand("DATE_ADD", [name, type, dt.year ? dt.md.replace(/^(\d\d)-(\d\d)$/, "$1/$2/" + dt.year) : dt.md.replace("-", "/"), group, ""].join("|")));
+    });
+    return { ok: ok.filter(Boolean), bad };
+  }
+  let dtFilter = "All", dtEditing = null;
+  function renderDates() {
+    const box = $("dtBody"); if (!box) return; dateBadge();
+    const D = dates(); box.innerHTML = "";
+    const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt !== undefined) e.textContent = txt; return e; };
+    const btn = (label, fn, primary) => { const b = el("button", "btn" + (primary ? " primary" : ""), label); b.onclick = fn; return b; };
+    // upcoming
+    const up = upcomingDates(60);
+    box.append(el("div", "bstage", "Coming up · next 60 days"));
+    if (!D.items.length) box.append(el("p", "empty-note", "No dates yet. Add one below, paste a list, or tell DOT, such as \"Sister Johnson's birthday is March 4.\" You can also send DOT a photo of a church birthday list."));
+    else if (!up.length) box.append(el("p", "empty-note", "Nothing in the next 60 days."));
+    up.forEach(({ it, o }) => {
+      const r = el("div", "dtrow");
+      const chip = el("span", "duechip" + (o.days === 0 ? " over" : o.days <= D.lead ? " soon" : ""), o.days === 0 ? "Today" : o.days === 1 ? "Tomorrow" : "In " + o.days + " days");
+      const mid = el("div", "dtmid"); mid.append(el("strong", "", it.name), el("small", "", (it.type === "Birthday" ? "🎂 " : it.type === "Anniversary" ? "💍 " : "⭐ ") + occWhat(it, o).replace(/^./, (c) => c.toUpperCase()) + " · " + fmtShort(o.date) + " · " + it.group + (it.note ? " · " + it.note : "")));
+      const dm = btn("Draft message", () => { $("dtDlg").close(); ask("Draft a short, warm " + (it.type === "Other" ? "" : it.type.toLowerCase() + " ") + "text message from me to " + it.name + " for their " + occWhat(it, o) + " on " + fmtShort(o.date) + "." + (it.group === "Church" ? " I'm their pastor." : "") + (it.note ? " Note: " + it.note + "." : "")); });
+      r.append(chip, mid, dm); box.append(r);
+    });
+    // add / edit form
+    box.append(el("div", "bstage", dtEditing ? "Edit date" : "Add a date"));
+    const f = el("div", "dtform");
+    const ni = el("input"); ni.placeholder = "Name, such as \"John & Mary Smith\"";
+    const ts = el("select"); DT_TYPES.forEach((t) => ts.append(new Option(t, t)));
+    const di = el("input"); di.placeholder = "Date: 3/14 or 3/14/1958"; di.inputMode = "numeric";
+    const gs = el("select"); DT_GROUPS.forEach((g) => gs.append(new Option(g, g)));
+    const no = el("input"); no.placeholder = "Note (optional), such as \"deacon\" or \"likes peppermint\"";
+    if (dtEditing) { const it = D.items.find((x) => x.id === dtEditing); if (it) { ni.value = it.name; ts.value = it.type; gs.value = it.group; no.value = it.note || ""; const [m, d] = it.md.split("-").map(Number); di.value = m + "/" + d + (it.year ? "/" + it.year : ""); } else dtEditing = null; }
+    const msg = el("small", "", ""); msg.style.color = "var(--muted)";
+    const saveB = btn(dtEditing ? "Save changes" : "Add", () => {
+      const dt = parseDateArg(di.value); if (!ni.value.trim()) { msg.textContent = "Enter a name."; return; } if (!dt) { msg.textContent = "Date not recognized. Try 3/14 or 3/14/1958."; return; }
+      let m;
+      if (dtEditing) { const it = D.items.find((x) => x.id === dtEditing); Object.assign(it, { name: ni.value.trim(), type: ts.value, md: dt.md, year: dt.year, group: gs.value, note: no.value.trim() }); m = "Updated " + possessive(it.name) + " " + it.type.toLowerCase() + "."; dtEditing = null; }
+      else m = applyDateCommand("DATE_ADD", [ni.value.trim(), ts.value, di.value, gs.value, no.value.trim()].join("|"));
+      if (m) { save(); renderDates(); note(m); }
+    }, true);
+    const row1 = el("div", "addrow"); row1.append(ni);
+    const row2 = el("div", "addrow"); row2.append(ts, di, gs);
+    const row3 = el("div", "addrow"); row3.append(no, saveB); if (dtEditing) row3.append(btn("Cancel", () => { dtEditing = null; renderDates(); }));
+    f.append(row1, row2, row3, msg); box.append(f);
+    // bulk paste
+    const bd = el("details", "fbdet"); bd.append(el("summary", "", "Paste a list"));
+    const ta = el("textarea"); ta.rows = 5; ta.placeholder = "One per line: name, date, type, group\nMary Johnson, 3/4/1956, birthday, church\nJohn & Mary Smith, 6/12/1982, anniversary, church\nDavid, 9/30, birthday, family";
+    const bm = el("small", "", ""); bm.style.color = "var(--muted)";
+    bd.append(ta, btn("Add all", () => { const r = parseBulk(ta.value); if (r.ok.length) { save(); renderDates(); note("Added or updated " + r.ok.length + " date" + (r.ok.length === 1 ? "" : "s") + "." + (r.bad.length ? " Couldn't read " + r.bad.length + " line" + (r.bad.length === 1 ? "" : "s") + ": " + r.bad.join(" · ") : "")); } else bm.textContent = "No lines recognized. Use: name, date, type, group."; }, true), bm);
+    box.append(bd);
+    // full list
+    const ld = el("details", "fbdet"); ld.append(el("summary", "", "All dates (" + D.items.length + ")"));
+    const fr = el("div", "addrow"); const fsel = el("select"); ["All", ...DT_GROUPS, "Birthdays", "Anniversaries"].forEach((g) => fsel.append(new Option(g, g))); fsel.value = dtFilter;
+    fsel.onchange = () => { dtFilter = fsel.value; renderDates(); box.querySelectorAll("details")[1].open = true; };
+    fr.append(fsel); ld.append(fr);
+    const shown = D.items.filter((it) => dtFilter === "All" || it.group === dtFilter || (dtFilter === "Birthdays" && it.type === "Birthday") || (dtFilter === "Anniversaries" && it.type === "Anniversary")).sort((a, b) => a.md.localeCompare(b.md) || a.name.localeCompare(b.name));
+    let lastM = "";
+    shown.forEach((it) => {
+      const mo = MONTHS[+it.md.slice(0, 2) - 1]; if (mo !== lastM) { ld.append(el("div", "dtmonth", mo)); lastM = mo; }
+      const r = el("div", "dtrow"); const mid = el("div", "dtmid");
+      mid.append(el("strong", "", it.name), el("small", "", (it.type === "Birthday" ? "🎂 " : it.type === "Anniversary" ? "💍 " : "⭐ ") + it.type + " · " + mdText(it) + " · " + it.group + (it.note ? " · " + it.note : "")));
+      r.append(mid, btn("Edit", () => { dtEditing = it.id; renderDates(); $("dtBody").querySelector(".dtform input").focus(); }),
+        btn("Delete", () => { if (!confirm("Delete " + possessive(it.name) + " " + it.type.toLowerCase() + "?")) return; D.items = D.items.filter((x) => x !== it); save(); renderDates(); box.querySelectorAll("details")[1].open = true; }));
+      ld.append(r);
+    });
+    if (!shown.length) ld.append(el("p", "empty-note", "None yet."));
+    box.append(ld);
+    // settings
+    const sd = el("div", "addrow"); const lab = el("span", "", "Heads-up"); lab.style.cssText = "align-self:center;color:var(--muted)";
+    const ls = el("select"); [1, 2, 3, 5, 7, 14].forEach((n) => ls.append(new Option(n + " day" + (n === 1 ? "" : "s") + " ahead", n))); ls.value = String(D.lead);
+    ls.onchange = () => { D.lead = +ls.value; save(); renderDates(); };
+    sd.append(lab, ls); box.append(sd);
   }
 
   // ---------- Family Bank (family assistance fund) ----------
@@ -2161,7 +2376,7 @@ Use MEMO only for things worth keeping long term. Never read the MEMO line aloud
       `BRIEFING
 When ${name} asks for a briefing, gather everything with your tools first: Helendale weather, his calendar for today if you have a calendar tool, silver prices with his stack, and the top three national news headlines from one web search.
 Then deliver one spoken rundown of about 170 words in this order:
-a short greeting suited to the time of day; the weather now, the high and low, and anything notable; today's schedule, or say his calendar is clear; silver in two sentences covering price and direction, buying window status, and stack progress; his to-do list in one sentence, naming overdue and due-today items and how many others are open; his Bible reading for today in one sentence, including whether he is behind, or on Sunday that it is a rest day; one market sentence from get_stocks for his watchlist, such as how many are up or down and the biggest mover, noting if the market is closed; if a book review is due, mention it in a few words; bills due within 7 days or overdue, from his bills and due dates list, in one sentence with amounts, or say nothing is due this week; if any Family Bank payments are due within 7 days, late, or a loan request awaits the board, one sentence on that; three headlines in one sentence each; then close with one short question or suggestion.
+a short greeting suited to the time of day; the weather now, the high and low, and anything notable; today's schedule, or say his calendar is clear; silver in two sentences covering price and direction, buying window status, and stack progress; his to-do list in one sentence, naming overdue and due-today items and how many others are open; his Bible reading for today in one sentence, including whether he is behind, or on Sunday that it is a rest day; one market sentence from get_stocks for his watchlist, such as how many are up or down and the biggest mover, noting if the market is closed; if a book review is due, mention it in a few words; bills due within 7 days or overdue, from his bills and due dates list, in one sentence with amounts, or say nothing is due this week; if any Family Bank payments are due within 7 days, late, or a loan request awaits the board, one sentence on that; birthdays and anniversaries in the next 7 days, from his saved dates, in one sentence with the day and age or years when listed, or say nothing; three headlines in one sentence each; then close with one short question or suggestion.
 Do not give the full silver report unless he asks for it, and do not state the clock time. If any source is unavailable, say so in a few words and continue with the rest.`,
 
       `SCRIPTURE AND SERMON PREP
@@ -2187,6 +2402,12 @@ When he says an episode is finished, add one final separate line in exactly this
       `TRANSLATOR MODE
 When ${name} asks to start translator mode, or to translate everything he says into a language, confirm in one short sentence and add one final separate line in exactly this form, naming the language in English: TRANSLATE_ON: Spanish
 Never read that line aloud. For a single phrase, such as "how do you say God bless you in Spanish," answer normally with the translation and one short pronunciation tip.`,
+
+      `BIRTHDAYS AND ANNIVERSARIES
+${name} keeps birthdays and anniversaries for his family and church members. The app calculates every date, day count, age, and number of years:
+${datesForPrompt()}
+Record changes with one final line each: DATE_ADD: name | Birthday, Anniversary, or Other | date (M/D, M/D/YYYY, or YYYY-MM-DD; include the year only if he gave it) | Family, Church, Friend, or Other | note; DATE_EDIT: id or name | new name | type | date | group | note (leave a field empty to keep it); DATE_DELETE: id or name | type; DATE_LEAD: number of days ahead for heads-ups.
+For an anniversary, use the couple's names, such as "John & Mary Smith." If he gives a birthday without a year, save it without one; never guess a year, an age, or a number of years. If a name matches more than one saved person, ask which one. Report ages, years, and days exactly as listed above, never your own math. From a photo or list of birthdays, add one DATE_ADD line per person and say how many you added. When he asks, draft a short, warm message, card note, or prayer for the person in his voice as their pastor, family member, or friend.`,
 
       `FAMILY BANK
 ${name} runs a family assistance fund that relatives can borrow from at a low rate. The app calculates every figure and checks every rule:
@@ -2344,7 +2565,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
       if (stackNew !== null && !isNaN(stackNew)) state.settings.stackOz = stackNew;
       recordSilver(data.metals);
       const listChanges = [];
-      reply = reply.replace(/^\s*(TODO_ADD|TODO_DONE|TODO_UNDONE|TODO_DELETE|NOTE_DELETE|NOTE|DEBT_ADD|DEBT_PAY|DEBT_BALANCE|DEBT_TERMS|DEBT_PLAN|DEBT_DELETE|DEBT_DUE|BILL_ADD|BILL_PAID|BILL_DELETE|BILL_EDIT|FBANK_CONTRIB|FBANK_REQUEST|FBANK_APPROVE|FBANK_DECLINE|FBANK_FUND|FBANK_PAY|FBANK_AFR|STUDY_PLAN|STUDY_THEME|STUDY_READ|STUDY_SCORE|BOOK_ADD|BOOK_START|BOOK_PROGRESS|BOOK_DONE|BOOK_SKIP|BOOK_REMOVE|BOOK_CHECK|BOOK_REVIEWED|PLAYBOOK|TIMER_START|TIMER_STOP|TIMER_ADD):\s*(.*)$/gim, (m, cmd, arg) => {
+      reply = reply.replace(/^\s*(TODO_ADD|TODO_DONE|TODO_UNDONE|TODO_DELETE|NOTE_DELETE|NOTE|DEBT_ADD|DEBT_PAY|DEBT_BALANCE|DEBT_TERMS|DEBT_PLAN|DEBT_DELETE|DEBT_DUE|BILL_ADD|BILL_PAID|BILL_DELETE|BILL_EDIT|FBANK_CONTRIB|FBANK_REQUEST|FBANK_APPROVE|FBANK_DECLINE|FBANK_FUND|FBANK_PAY|FBANK_AFR|DATE_ADD|DATE_EDIT|DATE_DELETE|DATE_LEAD|STUDY_PLAN|STUDY_THEME|STUDY_READ|STUDY_SCORE|BOOK_ADD|BOOK_START|BOOK_PROGRESS|BOOK_DONE|BOOK_SKIP|BOOK_REMOVE|BOOK_CHECK|BOOK_REVIEWED|PLAYBOOK|TIMER_START|TIMER_STOP|TIMER_ADD):\s*(.*)$/gim, (m, cmd, arg) => {
         const C = cmd.toUpperCase();
         if (C.startsWith("TIMER_")) {
           let tm = null;
@@ -2354,7 +2575,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
           if (tm) listChanges.push(tm);
           return "";
         }
-        const msg = C.startsWith("FBANK_") ? applyFbankCommand(C, arg.trim()) : (C === "DEBT_DUE" || C.startsWith("BILL_")) ? applyBillCommand(C, arg.trim()) : C.startsWith("DEBT_") ? applyDebtCommand(C, arg.trim()) : C.startsWith("STUDY_") ? applyStudyCommand(C, arg.trim())
+        const msg = C.startsWith("DATE_") ? applyDateCommand(C, arg.trim()) : C.startsWith("FBANK_") ? applyFbankCommand(C, arg.trim()) : (C === "DEBT_DUE" || C.startsWith("BILL_")) ? applyBillCommand(C, arg.trim()) : C.startsWith("DEBT_") ? applyDebtCommand(C, arg.trim()) : C.startsWith("STUDY_") ? applyStudyCommand(C, arg.trim())
           : (C.startsWith("BOOK_") || C === "PLAYBOOK") ? applyBookCommand(C, arg.trim()) : applyListCommand(C, arg.trim());
         if (msg) listChanges.push(msg);
         return "";
@@ -2887,6 +3108,10 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
   $("trExit").onclick = () => { state.tr.on = false; save(); renderTrBar(); note("Translator mode off."); };
   $("rTimerStop").onclick = () => { const r = stopTimer(false); if (r) note("Reading timer stopped: " + mins(r.mins) + " logged" + (r.bk ? " for " + r.bk.title : "") + "."); };
   $("rTimerAdd").onclick = () => { if (state.timer) { state.timer.end += 5 * 60000; state.timer.minutes += 5; save(); runTimer(); } };
+  const dtDlg = $("dtDlg");
+  $("dtBtn").onclick = () => { dtEditing = null; renderDates(); dtDlg.showModal(); };
+  $("dtClose").onclick = () => dtDlg.close();
+  dtDlg.addEventListener("click", (e) => { if (e.target === dtDlg) dtDlg.close(); });
   const fbDlg = $("fbDlg");
   $("fbBtn").onclick = () => { renderFbank(); fbDlg.showModal(); };
   $("fbClose").onclick = () => fbDlg.close();
@@ -2959,7 +3184,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
 
   applyPalette(state.settings.palette);
   if (state.settings.syncOn) setTimeout(() => syncNow(false), 1200);
-  setTimeout(() => { try { dueAlertOnOpen(); } catch (e) {} }, 900);
+  setTimeout(() => { try { dueAlertOnOpen(); } catch (e) {} try { dateAlertOnOpen(); } catch (e) {} }, 900);
   renderList();
   if (state.timer) { if (state.timer.end <= Date.now()) setTimeout(timerDone, 800); else { runTimer(); keepAwake(true); } }
   render();
