@@ -205,6 +205,16 @@
   .wrdoc ins { color: #1a7f37; background: rgba(26,127,55,.10); text-decoration: underline; }
   .wrdoc del { color: #b42318; background: rgba(180,35,24,.08); text-decoration: line-through; }
   .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .suglist { display: grid; gap: 8px; padding: 10px 12px 12px; }
+  .sug { background: #fbf8f1; color: #1f1f1f; border-radius: 10px; padding: 12px 14px; font: .98rem/1.5 Georgia, "Times New Roman", serif; display: grid; gap: 6px; }
+  .sug[data-st="applied"], .sug[data-st="done"], .sug[data-st="skipped"] { opacity: .62; }
+  .sug-o { color: #444; } .sug-o::before { content: "Your text: "; font: 600 .78rem var(--display); color: #8a8a8a; letter-spacing: .04em; }
+  .sug-s { font-weight: 700; color: #111; } .sug-s::before { content: "Suggested: "; font: 600 .78rem var(--display); color: #1a7f37; letter-spacing: .04em; }
+  .sug-why { font-style: italic; color: #666; font-size: .9rem; }
+  .sug-act { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 2px; }
+  .sug-act .btn { padding: 6px 10px; font-size: .82rem; background: #fff; color: #1f2937; border-color: #cfd6df; }
+  .sug-st { font: 600 .72rem var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 3px 8px; border-radius: 6px; background: #e8edf3; color: #334; margin-right: auto; }
+  .sug-st.open { background: #fff4d6; color: #7a5300; } .sug-st.applied { background: #dcf3e3; color: #1a7f37; } .sug-st.done { background: #dbeafe; color: #1e40af; }
   .edwarn { margin: 8px 12px 4px; padding: 10px 12px; border-radius: 8px; background: rgba(240,80,60,.12); border: 1px solid rgba(240,80,60,.4); color: #ffb4a8; font-size: .9rem; line-height: 1.4; }
   .edstat { display: block; margin: 8px 14px 0; color: var(--muted); font-size: .85rem; }
   .edstat.bad { color: #ffb4a8; }
@@ -616,7 +626,7 @@
       <h2 style="font-size:1.05rem;margin-top:6px">Sync across devices</h2>
       <label class="check"><input id="sSync" type="checkbox"> Keep this device in sync with my other devices</label>
       <small id="syncStatus" style="color:var(--muted)">Off on this device.</small>
-      <small style="color:var(--muted);display:block;margin-top:6px">DOT app version 43</small>
+      <small style="color:var(--muted);display:block;margin-top:6px">DOT app version 44</small>
       <button class="btn" id="syncNowBtn" style="justify-self:start">Sync now</button>
       <div class="field">
         <label for="bkSel">Restore from a backup</label>
@@ -1160,7 +1170,7 @@
     if (k === "books") return !v.list || !v.list.length;
     if (k === "study") return !v.days || !v.days.length;
     if (k === "dates") return !(v.items || []).length;
-    if (k === "writing") return !(v.books || []).some((b) => (b.chapters || []).length || Object.keys(b.check || {}).length || (b.notes || []).length || (b.style || []).length || (b.aiLog || []).length || (b.editLog || []).length || b.audience || b.voice);
+    if (k === "writing") return !(v.books || []).some((b) => (b.chapters || []).length || Object.keys(b.check || {}).length || (b.notes || []).length || (b.style || []).length || (b.aiLog || []).length || (b.editLog || []).length || (b.sugs || []).length || b.audience || b.voice);
     if (k === "fbank") return !(v.loans || []).length && !(v.ledger || []).length;
     return false;
   }
@@ -1189,7 +1199,7 @@
   function fixIds() {
     let mx = state.nextId || 1;
     const scan = (arr) => (arr || []).forEach((x) => { if (x && x.id >= mx) mx = x.id + 1; });
-    scan(state.todos); scan(state.qnotes); scan(state.debts); scan(state.bills); if (state.fbank) { scan(state.fbank.loans); scan(state.fbank.ledger); } if (state.dates) scan(state.dates.items); if (state.writing) (state.writing.books || []).forEach((b) => { scan([b]); scan(b.chapters); }); if (state.books) { scan(state.books.list); scan(state.books.playbook); }
+    scan(state.todos); scan(state.qnotes); scan(state.debts); scan(state.bills); if (state.fbank) { scan(state.fbank.loans); scan(state.fbank.ledger); } if (state.dates) scan(state.dates.items); if (state.writing) (state.writing.books || []).forEach((b) => { scan([b]); scan(b.chapters); scan(b.sugs); }); if (state.books) { scan(state.books.list); scan(state.books.playbook); }
     state.nextId = mx;
   }
   function syncStatus(msg) { const el = $("syncStatus"); if (el) el.textContent = msg; }
@@ -1745,6 +1755,10 @@
       if (fb.notes.length) out.push("Recent editor's notes:\n" + fb.notes.slice(-8).map((n) => "  - " + n.date + ": " + n.text).join("\n"));
       const ai = aiSummary(fb); out.push("AI-drafted text recorded for this book: " + (ai.any ? fmtN(ai.words) + " words across " + ai.chs + " chapter" + (ai.chs === 1 ? "" : "s") : "none"));
       const hit = f.ch && findChapter(f.ch, fb);
+      if (hit) {
+        const sc = sugCounts(fb, hit.c.id), last = (fb.sugs || []).filter((x) => x.ch === hit.c.id).slice(-1)[0];
+        out.push("Suggestions already given for the active chapter: " + sc.all + " (" + sc.open + " open, " + sc.applied + " applied, " + sc.done + " changed by him, " + sc.skipped + " skipped)." + (last ? " The last one was about: \"" + last.o.slice(0, 140) + "\". When he says continue, pick up after that point." : ""));
+      }
       if (hit && focusCache.key === chKey(hit.b, hit.c)) {
         const t = focusCache.text || "";
         out.push("ACTIVE CHAPTER: #" + hit.c.id + " Chapter " + (fb.chapters.indexOf(hit.c) + 1) + ", \"" + hit.c.title + "\", " + hit.c.status + ", " + fmtN(wrWords(t)) + " words." +
@@ -1859,7 +1873,7 @@
       a.download = b.title.replace(/[^\w\- ]+/g, "").trim().slice(0, 60) + ".doc"; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
     })();
   }
-  let wrBookId = null, wrEdit = null, wrView = null, wrMarked = true;
+  let wrBookId = null, wrEdit = null, wrView = null, wrMarked = true, wrNotesCh = null, wrNotesOpen = true;
   function renderWriting() {
     const box = $("wrBody"); if (!box) return;
     const W = writing(); box.innerHTML = "";
@@ -1880,6 +1894,25 @@
       });
       const nr = el("div", "addrow"); const ni = input("", "New book title"); nr.append(ni, btn("Add book", () => { if (!ni.value.trim()) return; W.books.push(newBook(ni.value.trim(), "", "", "")); save(); renderWriting(); }));
       box.append(nr); return;
+    }
+    // editor's notes: every suggestion, section by section
+    if (wrView === "notes") {
+      const c0 = sugCounts(b);
+      const top3 = el("div", "addrow"); top3.append(btn("‹ Back", () => { wrView = null; renderWriting(); }));
+      const fs = el("select"); fs.append(new Option("All sections", "")); b.chapters.forEach((c) => { const n = sugCounts(b, c.id); if (n.all) fs.append(new Option(c.title + " (" + n.open + " open)", c.id)); }); fs.value = wrNotesCh ? String(wrNotesCh) : "";
+      fs.onchange = () => { wrNotesCh = fs.value ? Number(fs.value) : null; renderWriting(); };
+      const lab = el("label", "wrcheck"); const cb = el("input"); cb.type = "checkbox"; cb.checked = wrNotesOpen; cb.onchange = () => { wrNotesOpen = cb.checked; renderWriting(); }; lab.append(cb, el("span", "", "Open only"));
+      top3.append(fs, lab);
+      const dl = el("div", "addrow"); dl.append(btn("Download notes (Word)", () => downloadNotes(b, false)), btn("Download open notes only", () => downloadNotes(b, true)));
+      box.append(top3, el("small", "", c0.all + " suggestions · " + c0.open + " open · " + c0.applied + " applied · " + c0.done + " changed by you · " + c0.skipped + " skipped"), dl);
+      let shown = 0;
+      b.chapters.forEach((c) => {
+        if (wrNotesCh && c.id !== wrNotesCh) return;
+        const list = (b.sugs || []).filter((x) => x.ch === c.id && (!wrNotesOpen || x.st === "open")); if (!list.length) return;
+        box.append(el("div", "bstage", c.title)); list.forEach((x) => { box.append(sugItemEl(x.id)); shown++; });
+      });
+      if (!shown) box.append(el("p", "empty-note", c0.all ? "No open suggestions here. Uncheck Open only to see all of them." : "No suggestions yet. Open a section, tap Work on this with DOT, and say \"Go through this line by line and give me your suggestions.\""));
+      return;
     }
     // running edited manuscript
     if (wrView === "doc") {
@@ -1934,7 +1967,7 @@
       box.append(el("div", "bstage", "Chapter " + (b.chapters.indexOf(c) + 1) + (c.ai ? " · contains AI-drafted text" : "")), tt, st, ta, cnt, row);
       return;
     }
-    const top = el("div", "addrow"); top.append(btn("‹ All books", () => { wrBookId = null; renderWriting(); }), btn("📄 Edited manuscript", () => { wrView = "doc"; renderWriting(); }, true), btn("Work on whole book with DOT", () => { setFocus(b, null); $("wrDlg").close(); note("Writing desk open: " + b.title + ". Ask for a critique, a plan, or publishing help."); }));
+    const top = el("div", "addrow"); top.append(btn("‹ All books", () => { wrBookId = null; renderWriting(); }), btn("📝 Editor's notes" + (sugCounts(b).open ? " (" + sugCounts(b).open + " open)" : ""), () => { wrView = "notes"; wrNotesCh = null; renderWriting(); }, true), btn("📄 Edited manuscript", () => { wrView = "doc"; renderWriting(); }), btn("Work on whole book with DOT", () => { setFocus(b, null); $("wrDlg").close(); note("Writing desk open: " + b.title + ". Ask for a critique, a plan, or publishing help."); }));
     box.append(top);
     // chapters
     const words = b.chapters.reduce((a, c) => a + (c.words || 0), 0);
@@ -2075,7 +2108,7 @@
     const log = (b.editLog || []);
     if (marked && log.length) {
       html += "<h2 style='page-break-before:always'>Corrections log</h2>";
-      log.forEach((e) => { html += "<p><strong>" + escH(e.date + " · " + e.label + " · " + (e.kind === "draft" ? "DOT draft added" : e.kind === "edit" ? "DOT edit applied" : "Your changes")) + "</strong>" + (e.note ? "<br>" + escH(e.note) : "") + "</p>"; });
+      log.forEach((e) => { html += "<p><strong>" + escH(e.date + " · " + e.label + " · " + (e.kind === "draft" ? "DOT draft added" : e.kind === "edit" ? "DOT edit applied" : e.kind === "suggestion" ? "Suggestion applied" : "Your changes")) + "</strong>" + (e.note ? "<br>" + escH(e.note) : "") + "</p>"; });
     }
     return { html, totA, totD };
   }
@@ -2085,6 +2118,94 @@
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([full], { type: "application/msword" }));
     a.download = b.title.replace(/[^\w\- ]+/g, "").trim().slice(0, 60) + (marked ? " - with corrections" : " - edited") + ".doc";
     document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+  }
+
+  // ---------- editor's suggestions: line-by-line notes he applies himself ----------
+  function parseSuggestions(body) {
+    const items = []; let cur = null, field = null;
+    String(body || "").split("\n").forEach((raw) => {
+      const line = raw.replace(/^\s*\d+[.)]\s*/, "");
+      const m = line.match(/^\s*(ORIGINAL|SUGGESTED|SUGGESTION|WHY|REASON)\s*:\s*(.*)$/i);
+      if (m) {
+        const k = m[1].toUpperCase(), key = k === "ORIGINAL" ? "o" : (k === "WHY" || k === "REASON") ? "why" : "s";
+        if (key === "o") { cur = { o: "", s: "", why: "" }; items.push(cur); }
+        if (!cur) { cur = { o: "", s: "", why: "" }; items.push(cur); }
+        field = key; cur[key] = m[2].trim(); return;
+      }
+      if (cur && field && raw.trim()) cur[field] += " " + raw.trim();
+    });
+    return items.map((x) => ({ o: x.o.trim().replace(/^["“]|["”]$/g, ""), s: x.s.trim().replace(/^["“]|["”]$/g, ""), why: x.why.trim() })).filter((x) => x.o && x.s);
+  }
+  function storeSuggestions(reply, docChId) {
+    const out = [];
+    String(reply).replace(/\[\[\s*SUGGEST:?\s*([^\]]*)\]\]([\s\S]*?)(?:\[\[\s*\/\s*SUGGEST[^\]]*\]\]|$)/gi, (m, title, body) => {
+      const ref = title.split("|")[0].trim().replace(/^#/, ""), hit = findChapter(ref);
+      if (!hit || String(hit.c.id) !== String(docChId)) { out.push(null); return ""; }
+      const b = hit.b; b.sugs = b.sugs || [];
+      const ids = parseSuggestions(body).map((x) => { const rec = { id: state.nextId++, ch: hit.c.id, date: todayStr(), o: x.o, s: x.s, why: x.why, st: "open" }; b.sugs.push(rec); return rec.id; });
+      if (b.sugs.length > 3000) b.sugs = b.sugs.slice(-3000);
+      out.push(ids); return "";
+    });
+    return out;
+  }
+  function findSug(id) { for (const b of writing().books) { const r = (b.sugs || []).find((x) => x.id === id); if (r) return { b, r }; } return null; }
+  // find his exact words even if quotes or spacing differ slightly; returns [start, end] in the raw text
+  function locate(text, needle) {
+    const norm = (ch) => ch.replace(/[“”„]/g, '"').replace(/[‘’‚]/g, "'").replace(/[–—]/g, "-");
+    const map = [], chars = []; let prevSpace = false;
+    for (let i = 0; i < text.length; i++) { let ch = norm(text[i]); if (/\s/.test(ch)) { if (prevSpace) continue; ch = " "; prevSpace = true; } else prevSpace = false; chars.push(ch); map.push(i); }
+    const hay = chars.join(""), nd = norm(String(needle)).replace(/\s+/g, " ").trim(); if (!nd) return null;
+    const at = hay.indexOf(nd); if (at < 0) return null;
+    return [map[at], map[at + nd.length - 1] + 1];
+  }
+  const SUG_ST = { open: "Open", applied: "Applied", done: "Done", skipped: "Skipped" };
+  function sugItemEl(id, onChange) {
+    const f = findSug(id), wrap = document.createElement("div"); wrap.className = "sug";
+    if (!f) { wrap.textContent = "This suggestion was removed."; return wrap; }
+    const { b, r } = f, chap = b.chapters.find((c) => c.id === r.ch);
+    const mk = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; e.textContent = txt; return e; };
+    const draw = () => {
+      wrap.innerHTML = ""; wrap.dataset.st = r.st;
+      wrap.append(mk("div", "sug-o", r.o), mk("div", "sug-s", r.s));
+      if (r.why) wrap.append(mk("div", "sug-why", r.why));
+      const row = document.createElement("div"); row.className = "sug-act";
+      row.append(mk("span", "sug-st " + r.st, SUG_ST[r.st] || r.st));
+      const bt = (label, fn) => { const x = document.createElement("button"); x.className = "btn"; x.textContent = label; x.onclick = fn; row.append(x); return x; };
+      if (r.st === "open") {
+        if (chap) bt("Apply", async () => {
+          const cur = await loadChapterText(b, chap), loc = locate(cur, r.o);
+          if (!loc) { note("I couldn't find those exact words in " + chap.title + ", so nothing was changed. The text may have been edited since. Make this change yourself, then tap I changed it."); return; }
+          const text = cur.slice(0, loc[0]) + r.s + cur.slice(loc[1]);
+          await saveChapterText(b, chap, text, { kind: "suggestion", body: r.s, note: (r.why ? r.why + ": " : "") + "\"" + r.o.slice(0, 120) + "\" → \"" + r.s.slice(0, 120) + "\"" });
+          r.st = "applied"; save(); draw(); if (onChange) onChange();
+        });
+        bt("I changed it", () => { r.st = "done"; save(); draw(); if (onChange) onChange(); });
+        bt("Skip", () => { r.st = "skipped"; save(); draw(); if (onChange) onChange(); });
+      } else bt("Reopen", () => { r.st = "open"; save(); draw(); if (onChange) onChange(); });
+      wrap.append(row);
+    };
+    draw(); return wrap;
+  }
+  function sugCounts(b, chId) {
+    const list = (b.sugs || []).filter((x) => chId == null || x.ch === chId), c = { all: list.length, open: 0, applied: 0, done: 0, skipped: 0 };
+    list.forEach((x) => { c[x.st] = (c[x.st] || 0) + 1; }); return c;
+  }
+  function downloadNotes(b, onlyOpen) {
+    const author = b.author || "Dr. Floyd E. Dorsey Jr.";
+    let html = "<h1 style='text-align:center'>Editor's Notes</h1><h2 style='text-align:center;font-weight:normal'>" + escH(b.title) + (b.subtitle ? ": " + escH(b.subtitle) : "") + "</h2><p style='text-align:center'>" + escH(author) + "</p>";
+    b.chapters.forEach((c) => {
+      const list = (b.sugs || []).filter((x) => x.ch === c.id && (!onlyOpen || x.st === "open")); if (!list.length) return;
+      html += "<h2>" + escH(c.title) + "</h2>";
+      list.forEach((x, i) => {
+        html += "<p style='margin:0 0 4pt'><b>" + (i + 1) + ".</b> Your text: " + escH(x.o) + "</p>" +
+          "<p style='margin:0 0 4pt'>Suggested: <b>" + escH(x.s) + "</b></p>" +
+          (x.why ? "<p style='margin:0 0 4pt;color:#555'><i>Why: " + escH(x.why) + "</i></p>" : "") +
+          "<p style='margin:0 0 12pt;color:#777;font-size:10pt'>" + escH(SUG_ST[x.st] || x.st) + " · " + escH(x.date) + "</p>";
+      });
+    });
+    const full = "<html><head><meta charset='utf-8'><title>Editor's Notes</title></head><body style='font-family:Georgia,serif;font-size:12pt;line-height:1.45'>" + html + "</body></html>";
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([full], { type: "application/msword" }));
+    a.download = b.title.replace(/[^\w\- ]+/g, "").trim().slice(0, 50) + " - Editor's Notes.doc"; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
   }
 
   // ---------- silver buying windows and premium ----------
@@ -2903,16 +3024,16 @@
   // ---------- log ----------
   function splitBlocks(text) {
     const blocks = [];
-    let spoken = String(text).replace(/\[\[\s*(OUTLINE|DRAFT|EDIT):?\s*([^\]]*)\]\]([\s\S]*?)(?:\[\[\s*\/\s*(?:OUTLINE|DRAFT|EDIT)[^\]]*\]\]|$)/gi, (m, kind, title, body) => {
+    let spoken = String(text).replace(/\[\[\s*(OUTLINE|DRAFT|EDIT|SUGGEST):?\s*([^\]]*)\]\]([\s\S]*?)(?:\[\[\s*\/\s*(?:OUTLINE|DRAFT|EDIT|SUGGEST)[^\]]*\]\]|$)/gi, (m, kind, title, body) => {
       const k = kind.toLowerCase(); let ref = "", ttl = title.trim();
-      if (k !== "outline") { const pp = ttl.split("|").map((x) => x.trim()); ref = pp[0].replace(/^#/, ""); ttl = pp.slice(1).join(" | ") || (k === "draft" ? "Draft" : "Edited text"); }
+      if (k !== "outline") { const pp = ttl.split("|").map((x) => x.trim()); ref = pp[0].replace(/^#/, ""); ttl = pp.slice(1).join(" | ") || (k === "draft" ? "Draft" : k === "suggest" ? "Suggestions" : "Edited text"); }
       blocks.push({ kind: k, ref, title: ttl || "Outline", body: body.replace(/^\n+|\s+$/g, "") });
       return "";
     });
     spoken = spoken.replace(/\n{3,}/g, "\n\n").trim();
     return { spoken, blocks };
   }
-  function outlineCard(b, spokenNote, meta) {
+  function outlineCard(b, spokenNote, meta, sgIndex) {
     const card = document.createElement("div"); card.className = "outline";
     const head = document.createElement("div"); head.className = "ohead";
     const h = document.createElement("strong"); h.textContent = b.title;
@@ -2920,6 +3041,21 @@
     copy.onclick = async () => { try { await navigator.clipboard.writeText(b.title + "\n\n" + b.body); copy.textContent = "Copied"; } catch (e) { copy.textContent = "Copy failed"; } setTimeout(() => (copy.textContent = "Copy"), 1800); };
     const keep = document.createElement("button"); keep.className = "btn"; keep.textContent = "Save to notes";
     keep.onclick = () => { applyListCommand("NOTE", b.title + "\n" + b.body); save(); renderList(); keep.textContent = "Saved"; keep.disabled = true; };
+    if (b.kind === "suggest") {
+      const hit = b.ref && findChapter(b.ref), ids = meta && meta.sugIds && meta.sugIds[sgIndex];
+      const items = ids ? null : parseSuggestions(b.body);
+      h.textContent = "📝 Suggestions" + (hit ? " · " + hit.b.title + ", " + hit.c.title : "") + " (" + (ids ? ids.length : items.length) + ")";
+      copy.onclick = async () => { const list = ids ? ids.map((i) => findSug(i)).filter(Boolean).map((f) => f.r) : items; try { await navigator.clipboard.writeText(list.map((x, i) => (i + 1) + ". Your text: " + x.o + "\n   Suggested: " + x.s + (x.why ? "\n   Why: " + x.why : "")).join("\n\n")); copy.textContent = "Copied"; } catch (e) { copy.textContent = "Copy failed"; } setTimeout(() => (copy.textContent = "Copy"), 1800); };
+      keep.textContent = "Editor's notes"; keep.onclick = () => { if (!hit) return; wrBookId = hit.b.id; wrView = "notes"; wrEdit = null; wrNotesCh = hit.c.id; renderWriting(); $("wrDlg").showModal(); };
+      head.append(h, copy, keep); card.append(head);
+      const list = document.createElement("div"); list.className = "suglist";
+      if (ids) { ids.forEach((i) => list.append(sugItemEl(i))); if (!ids.length) list.append(Object.assign(document.createElement("div"), { className: "edstat", textContent: "No suggestions could be read from this reply." })); }
+      else {
+        const w = document.createElement("div"); w.className = "edwarn"; w.textContent = "Not saved to your editor's notes: DOT did not have this section open when she wrote these, so they may not match your words. Open the section on the writing desk, tap Work on this with DOT, and ask again."; card.append(w);
+        items.forEach((x) => { const d = document.createElement("div"); d.className = "sug"; const o = document.createElement("div"); o.className = "sug-o"; o.textContent = x.o; const sg = document.createElement("div"); sg.className = "sug-s"; sg.textContent = x.s; d.append(o, sg); list.append(d); });
+      }
+      card.append(list); return card;
+    }
     if (b.kind === "draft" || b.kind === "edit") {
       const hit = b.ref && findChapter(b.ref);
       const sawIt = !!(meta && meta.docCh && hit && String(meta.docCh) === String(hit.c.id));
@@ -2993,7 +3129,7 @@
       who.className = "who"; who.textContent = meta && meta.label ? meta.label : "DOT";
       const parts = splitBlocks(text);
       p.append(who, document.createTextNode(parts.spoken));
-      parts.blocks.forEach((b) => p.append(outlineCard(b, parts.spoken, meta)));
+      let sgi = 0; parts.blocks.forEach((b) => p.append(outlineCard(b, parts.spoken, meta, b.kind === "suggest" ? sgi++ : -1)));
       const se = sourcesEl(meta); if (se) p.append(se);
       if (parts.spoken.trim()) {
         const rb = document.createElement("button"); rb.className = "replay"; rb.textContent = "▶ Hear again";
@@ -3114,17 +3250,22 @@ Never read that line aloud. For a single phrase, such as "how do you say God ble
 ${name} is an author preparing his books for self-publishing, mainly through Amazon KDP. You serve as his editor, author critique partner, ghostwriter, and publishing coach.
 ${writingForPrompt()}
 ROLES
-- Editor. Work at the level he asks for. Big-picture editing: structure, flow, argument or plot, chapter order, what to cut or expand. Line editing: clarity, wordiness, repetition, rhythm, tone, consistency with his voice. Proofreading: grammar, spelling, punctuation, and consistency with the style sheet. Explain your most important changes briefly. Preserve his voice, theology, and meaning; never change doctrine or the sense of a passage without flagging it.
+- Editor. You work like a human editor marking up a manuscript: you give suggestions, and he decides and makes the changes. Never rewrite a whole section. For line editing and proofreading, go through the active chapter in order, line by line, and give each suggestion in a SUGGEST block (format below). For big-picture editing (structure, flow, argument or plot, order, what to cut or expand), give your notes in an OUTLINE block. Preserve his voice, theology, and meaning; flag anything touching doctrine instead of changing it.
 - Author critique. Speak as a demanding acquisitions editor would: what works, what is weak, who the reader is, what similar books readers would compare it to, and whether it is ready. Be specific and candid, with the passage or chapter you mean, and end with the three changes that would help most. For nonfiction, judge clarity of purpose, structure, biblical accuracy, application, and reader takeaway. For fiction, judge premise, plot and pacing, characters and their arcs, point of view, dialogue, worldbuilding, and stakes.
 - Ghostwriter. Draft only when he asks. Write in his voice, learned from his chapters and his voice notes. Never invent quotations, statistics, stories about real people, or citations; leave a clearly marked placeholder such as [add illustration] or [verify source] instead. Quote Scripture only from get_scripture results, in the translation the book uses.
 - Publishing coach. Guide him through self-publishing step by step using his checklist above: front matter and copyright page, ISBN choices, cover, interior formatting, trim size, categories and keywords, description, pricing, the AI content question, proof copy, and launch. For any current rule, price, royalty rate, or platform requirement, check with web search first, report it from that result, and name the source; never state those from memory.
 RUNNING MANUSCRIPT: the app keeps each chapter's original text and builds one continuous edited manuscript of the whole book, with your corrections marked, under 📄 Edited manuscript on the book's page, downloadable as a Word file clean or with corrections. Every edit he applies updates it.
 AI DISCLOSURE: KDP asks authors whether a book contains AI-generated text. Text you draft is AI-generated even after he edits it; your edits and suggestions on his own writing are AI-assisted. That is why drafts and edits must go in the blocks below, so the app keeps an accurate record for him.
 BLOCKS (shown on screen with buttons, never read aloud):
+- Line-by-line suggestions, the normal way you edit: [[SUGGEST: chapter id | short label]], then each suggestion as three lines, with a blank line between suggestions:
+ORIGINAL: his exact words, copied character for character from the active chapter, one to three sentences
+SUGGESTED: your improved wording of just that passage
+WHY: a short reason, such as grammar, clarity, wordiness, consistency, or accuracy
+then [[/SUGGEST]]. Give up to 30 suggestions per reply, in the order they appear in the text. Skip passages that need no change. If more remain, say where you stopped so he can say "continue." Each suggestion is saved to his Editor's Notes for that book; he applies it with one tap or changes it himself.
 - New prose you wrote, such as a drafted section, scene, or chapter: [[DRAFT: chapter id | short label]] then the text, then [[/DRAFT]] on its own line. If no chapter exists for it yet, first add one with WRITE_CHAPTER_ADD, and use the same id the app reports only in later replies; until then, write [[DRAFT: none | label]].
-- His own text after line editing or proofreading, ready to replace the chapter: [[EDIT: chapter id | short label]] then the full edited text, then [[/EDIT]]. If your changes add substantial new passages, use DRAFT for those passages instead.
+- A full rewrite of a short passage, only when he explicitly asks you to rewrite it: [[EDIT: chapter id | short label]] then the full rewritten text of the whole chapter, then [[/EDIT]]. Otherwise always use SUGGEST.
 - Critiques, plans, outlines, blurbs, author bios, and checklists go in an [[OUTLINE: title]] block.
-Write plain text inside blocks, with blank lines between paragraphs and no markdown. Outside the blocks, say in one to three spoken sentences what you did and suggest the next step. An EDIT block replaces the whole chapter, so it must always contain the complete chapter text. One reply holds about 5,000 words; if a chapter is longer than that, do not send an EDIT block. Give your critique or a list of corrections instead, and suggest he tap Split into sections on the writing desk so you can edit each section in full. When reviewing a long chapter, work in order and keep track of where you stopped so he can say "continue." HOW EDITS WORK, follow exactly: You can edit only the ACTIVE CHAPTER, whose full text is at the start of your instructions; use its exact id in the EDIT block. For any other chapter you have no text, so never write an EDIT or DRAFT block for it, and never rebuild a chapter from memory, summaries, or earlier replies. If he asks about a different chapter, add WRITE_FOCUS for it and ask him to send the request again so you receive its text. You never apply, save, or change his text yourself; nothing changes until he taps Accept changes or Add to chapter. So never say you made, applied, or saved a change; say "Here are my edits for [chapter]. Review them and tap Accept changes." The app checks each EDIT block against his text and refuses one that does not match. An EDIT block keeps every sentence of his chapter in order, changing only what needs correcting.
+Write plain text inside blocks, with blank lines between paragraphs and no markdown. Outside the blocks, say in one to three spoken sentences what you did and suggest the next step. An EDIT block replaces the whole chapter, so it must always contain the complete chapter text. One reply holds about 5,000 words; if a chapter is longer than that, do not send an EDIT block. Give your critique or a list of corrections instead, and suggest he tap Split into sections on the writing desk so you can edit each section in full. When reviewing a long chapter, work in order and keep track of where you stopped so he can say "continue." HOW EDITS WORK, follow exactly: You can edit only the ACTIVE CHAPTER, whose full text is at the start of your instructions; use its exact id in the EDIT block. For any other chapter you have no text, so never write an EDIT or DRAFT block for it, and never rebuild a chapter from memory, summaries, or earlier replies. If he asks about a different chapter, add WRITE_FOCUS for it and ask him to send the request again so you receive its text. You never apply, save, or change his text yourself; nothing changes until he taps Apply, Accept changes, or Add to chapter. So never say you made, applied, or saved a change; say "Here are my suggestions for [chapter]. They are in your Editor's Notes." The app checks each EDIT block against his text and refuses one that does not match. An EDIT block keeps every sentence of his chapter in order, changing only what needs correcting.
 Edit or critique only text you can actually see in this conversation; if the chapter text is not included, ask him to open it on the writing desk or paste it.
 Record changes with one final line each, never read aloud: WRITE_FOCUS: book id or title | chapter number or title (opens a chapter so its text is included next time); WRITE_FOCUS_OFF; WRITE_CHAPTER_ADD: book id | chapter title; WRITE_SUMMARY: chapter id | two-sentence summary (add one whenever you have read a chapter that lacks a summary or has changed); WRITE_STATUS: chapter id | Draft, Edited, or Final; WRITE_STAGE: book id | Drafting, Revising, Editing, Proofreading, Ready to publish, or Published; WRITE_CHECK: book id | checklist item | done or undo (only when he says it is done); WRITE_STYLE: book id | style rule; WRITE_NOTE: book id | editor's note to remember; WRITE_DETAILS: book id | title, subtitle, author, genre, audience, voice, or basis | new value; WRITE_BOOK_ADD: title | subtitle | genre.`,
 
@@ -3266,7 +3407,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
       return "\n\n[Verified at the time with: " + m.meta.checked.join(", ") + (hosts.length ? "; sources: " + hosts.join(", ") : "") + "]";
     };
     const hist = state.history.filter((m) => !m.tr).slice(-20);
-    const trimBlocks = (c, keep) => keep ? c : String(c).replace(/(\[\[\s*(DRAFT|EDIT)[^\]]*\]\])([\s\S]*?)(\[\[\s*\/\s*(DRAFT|EDIT)[^\]]*\]\])/gi, (m, a, k, body, z) => body.length > 1500 ? a + "\n[" + wrWords(body) + " words shown on screen earlier; not repeated here]\n" + z : m);
+    const trimBlocks = (c, keep) => keep ? c : String(c).replace(/(\[\[\s*(DRAFT|EDIT|SUGGEST)[^\]]*\]\])([\s\S]*?)(\[\[\s*\/\s*(DRAFT|EDIT|SUGGEST)[^\]]*\]\])/gi, (m, a, k, body, z) => body.length > 1500 ? a + "\n[" + wrWords(body) + " words shown on screen earlier; not repeated here]\n" + z : m);
     const lastA = hist.map((m) => m.role).lastIndexOf("assistant");
     const messages = [...hist.map((m, i) => ({ role: m.role, content: trimBlocks(m.content, i === lastA) + verifiedNote(m) })), { role: "user", content: text }];
     try {
@@ -3315,7 +3456,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
         state.settings.notes = (state.settings.notes ? state.settings.notes + "\n" : "") + memos.map((f) => "- " + f).join("\n");
       }
       const meta = { checked: Array.isArray(data.checked) ? data.checked : [], sources: Array.isArray(data.sources) ? data.sources.slice(0, 6) : [] };
-      if (docSent && docCh) meta.docCh = docCh;
+      if (docSent && docCh) { meta.docCh = docCh; try { meta.sugIds = storeSuggestions(reply, docCh); } catch (e) {} }
       state.history.push({ role: "user", content: text }, { role: "assistant", content: reply, meta });
       if (state.history.length > 200) state.history = state.history.slice(-200);
       save();
