@@ -1742,7 +1742,46 @@
     if (window.mammoth) return Promise.resolve(window.mammoth);
     return new Promise((res, rej) => { const sc = document.createElement("script"); sc.src = "https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"; sc.onload = () => res(window.mammoth); sc.onerror = () => rej(new Error("Couldn't load the Word reader. Check your internet connection.")); document.head.append(sc); });
   }
-  async function fileToText(file) {
+  const PDFJS = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/";
+  function loadPdfJs() {
+    if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+    return new Promise((res, rej) => { const sc = document.createElement("script"); sc.src = PDFJS + "pdf.min.js";
+      sc.onload = () => { try { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + "pdf.worker.min.js"; } catch (e) {} res(window.pdfjsLib); };
+      sc.onerror = () => rej(new Error("Couldn't load the PDF reader. Check your internet connection.")); document.head.append(sc); });
+  }
+  async function pdfToText(file, progress) {
+    const lib = await loadPdfJs(), doc = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise, pages = [];
+    for (let i = 1; i <= doc.numPages; i++) {
+      if (progress) progress("Reading page " + i + " of " + doc.numPages + "…");
+      const tc = await (await doc.getPage(i)).getTextContent(), lines = []; let line = "", lastY = null, gaps = [];
+      tc.items.forEach((it) => {
+        const y = it.transform ? it.transform[5] : null;
+        if (lastY !== null && y !== null && Math.abs(y - lastY) > 1 && line) { lines.push({ t: line, y: lastY }); line = ""; }
+        line += it.str; if (y !== null) lastY = y;
+        if (it.hasEOL) { lines.push({ t: line, y: lastY }); line = ""; }
+      });
+      if (line) lines.push({ t: line, y: lastY });
+      const L = lines.map((l) => ({ t: l.t.replace(/\s+/g, " ").trim(), y: l.y })).filter((l) => l.t && !/^(page\s*)?\d{1,4}$/i.test(l.t));
+      for (let k = 1; k < L.length; k++) if (L[k].y !== null && L[k - 1].y !== null) gaps.push(Math.abs(L[k - 1].y - L[k].y));
+      const norm = gaps.length ? gaps.slice().sort((a, b) => a - b)[Math.floor(gaps.length / 2)] : 0;
+      let out = "";
+      L.forEach((l, k) => {
+        if (!k) { out = l.t; return; }
+        const gap = l.y !== null && L[k - 1].y !== null ? Math.abs(L[k - 1].y - l.y) : 0;
+        const isHead = (/^(chapter|part|day|lesson|session)\s+\S+/i.test(l.t) && l.t.length < 120) || /^(introduction|preface|foreword|prologue|epilogue|conclusion|afterword|acknowledgments|acknowledgements)$/i.test(l.t);
+        const prevHead = /^(introduction|preface|foreword|prologue|epilogue|conclusion|afterword|acknowledgments|acknowledgements)$/i.test(L[k - 1].t) || (/^(chapter|part|day|lesson|session)\s+\S+/i.test(L[k - 1].t) && L[k - 1].t.length < 120);
+        if (isHead || prevHead || (norm && gap > norm * 1.45)) out += "\n\n" + l.t;
+        else if (/-$/.test(out) && /^[a-z]/.test(l.t)) out = out.slice(0, -1) + l.t;
+        else out += " " + l.t;
+      });
+      pages.push(out);
+    }
+    const text = pages.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+    if (wrWords(text) < 30) throw new Error("This PDF has little or no readable text. It may be a scanned image. Send it to DOT with the paperclip instead, or use the Word file.");
+    return text;
+  }
+  async function fileToText(file, progress) {
+    if (/\.pdf$/i.test(file.name) || file.type === "application/pdf") return await pdfToText(file, progress);
     if (/\.docx$/i.test(file.name)) {
       const m = await loadMammoth(); const buf = await file.arrayBuffer();
       const r = await m.convertToHtml({ arrayBuffer: buf });
@@ -1753,11 +1792,11 @@
     if (/\.(txt|md|text)$/i.test(file.name) || /^text\//.test(file.type)) return await file.text();
     if (/\.doc$/i.test(file.name)) throw new Error("Older .doc files can't be read. In Word or Pages, save it as .docx and try again.");
     if (/\.pages$/i.test(file.name)) throw new Error("Pages files can't be read directly. In Pages, use Export To → Word, then add the .docx here.");
-    throw new Error("Use a Word (.docx) or text file. For a PDF, send it to DOT with the paperclip instead.");
+    throw new Error("Use a Word (.docx), PDF, or text file.");
   }
   function splitManuscript(text) {
     const lines = String(text).split("\n"), out = []; let cur = null;
-    const isHead = (l) => /^##\s+\S/.test(l) || /^\s*(chapter|part|day|lesson|session)\s+([0-9ivxlc]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/i.test(l);
+    const isHead = (l) => /^##\s+\S/.test(l) || /^\s*(chapter|part|day|lesson|session)\s+([0-9ivxlc]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/i.test(l) || /^\s*(introduction|preface|foreword|prologue|epilogue|conclusion|afterword|acknowledgments|acknowledgements)\s*$/i.test(l);
     lines.forEach((l) => { if (isHead(l) && l.trim().length < 140) { cur = { title: l.replace(/^##\s+/, "").trim(), text: [] }; out.push(cur); } else { if (!cur) { cur = { title: "Opening", text: [] }; out.push(cur); } cur.text.push(l); } });
     return out.map((c) => ({ title: c.title, text: c.text.join("\n").replace(/^\s+|\s+$/g, "") })).filter((c) => c.text || out.length === 1);
   }
@@ -1817,7 +1856,7 @@
     // chapters
     const words = b.chapters.reduce((a, c) => a + (c.words || 0), 0);
     box.append(el("div", "bstage", "Chapters · " + fmtN(words) + " words"));
-    if (!b.chapters.length) box.append(el("p", "empty-note", "No chapters yet. Paste one below, add a Word file, or import a whole manuscript."));
+    if (!b.chapters.length) box.append(el("p", "empty-note", "No chapters yet. Paste one below, add a Word or PDF file, or import a whole manuscript."));
     b.chapters.forEach((c, i) => {
       const r = el("div", "dtrow"); const mid = el("div", "dtmid");
       mid.append(el("strong", "", (i + 1) + ". " + c.title), el("small", "", c.status + " · " + fmtN(c.words) + " words" + (c.ai ? " · AI-drafted text" : "") + (c.summary ? " · " + c.summary.slice(0, 90) + (c.summary.length > 90 ? "…" : "") : "")));
@@ -1829,18 +1868,18 @@
     // add chapter
     const ad = el("details", "fbdet"); ad.append(el("summary", "", "Add a chapter"));
     const at = input("", "Chapter title"); const ax = el("textarea", "wrtext"); ax.rows = 6; ax.placeholder = "Paste the chapter text (optional; leave empty to have DOT help draft it)";
-    const af = el("input"); af.type = "file"; af.accept = ".docx,.txt,.md,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    const af = el("input"); af.type = "file"; af.accept = ".docx,.pdf,.txt,.md,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     const am = el("small", "", ""); am.style.color = "var(--muted)";
-    af.onchange = async () => { const f = af.files[0]; if (!f) return; am.textContent = "Reading " + f.name + "…"; try { ax.value = await fileToText(f); if (!at.value) at.value = f.name.replace(/\.[^.]+$/, ""); am.textContent = fmtN(wrWords(ax.value)) + " words read from " + f.name; } catch (e) { am.textContent = e.message; } };
+    af.onchange = async () => { const f = af.files[0]; if (!f) return; am.textContent = "Reading " + f.name + "…"; try { ax.value = await fileToText(f, (m) => (am.textContent = m)); if (!at.value) at.value = f.name.replace(/\.[^.]+$/, ""); am.textContent = fmtN(wrWords(ax.value)) + " words read from " + f.name; } catch (e) { am.textContent = e.message; } };
     ad.append(at, ax, af, am, btn("Add chapter", async () => { if (!at.value.trim()) { am.textContent = "Give the chapter a title."; return; } const c = { id: state.nextId++, title: at.value.trim(), words: 0, updated: 0, status: "Draft", summary: "" }; b.chapters.push(c); await saveChapterText(b, c, ax.value); renderWriting(); note("Added " + c.title + " (" + fmtN(c.words) + " words) to " + b.title + "."); }, true));
     box.append(ad);
     // import manuscript
-    const im = el("details", "fbdet"); im.append(el("summary", "", "Import a whole manuscript (Word or text)"));
+    const im = el("details", "fbdet"); im.append(el("summary", "", "Import a whole manuscript (Word, PDF, or text)"));
     const imf = el("input"); imf.type = "file"; imf.accept = af.accept; const imm = el("small", "", "Chapters are split at headings or at lines that start with Chapter, Part, Day, Lesson, or Session."); imm.style.color = "var(--muted)";
     imf.onchange = async () => {
       const f = imf.files[0]; if (!f) return; imm.textContent = "Reading " + f.name + "…";
       try {
-        const parts = splitManuscript(await fileToText(f)); if (!parts.length) { imm.textContent = "No text found in that file."; return; }
+        const parts = splitManuscript(await fileToText(f, (m) => (imm.textContent = m))); if (!parts.length) { imm.textContent = "No text found in that file."; return; }
         if (!confirm("Add " + parts.length + " chapter" + (parts.length === 1 ? "" : "s") + " from " + f.name + " to " + b.title + "?")) { imm.textContent = ""; return; }
         for (const pt of parts) { const c = { id: state.nextId++, title: pt.title.slice(0, 120), words: 0, updated: 0, status: "Draft", summary: "" }; b.chapters.push(c); await saveChapterText(b, c, pt.text); }
         renderWriting(); note("Imported " + parts.length + " chapters into " + b.title + ".");
