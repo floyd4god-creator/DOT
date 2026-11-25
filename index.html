@@ -181,6 +181,24 @@
   .dtrow .btn { padding: 7px 10px; font-size: .82rem; flex: none; }
   .dtmonth { font: 600 .78rem var(--display); color: var(--muted); letter-spacing: .08em; text-transform: uppercase; margin-top: 8px; }
   .dtform { display: grid; gap: 8px; }
+  #wrBody { grid-template-columns: minmax(0, 1fr); }
+  #wrBody > *, #wrBody input, #wrBody select, #wrBody button, #wrBody textarea { min-width: 0; }
+  #wrBody .addrow { flex-wrap: wrap; }
+  #wrBody .addrow > input { flex: 1 1 200px; }
+  #wrBody input:not([type]), #wrBody input[type="file"], #wrBody select { width: 100%; box-sizing: border-box; }
+  #wrBody select, #wrBody input:not([type]) { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: inherit; }
+  #wrBody summary { cursor: pointer; font-family: var(--display); color: var(--amber); }
+  #wrBody details[open] { display: grid; gap: 8px; }
+  #wrBody details > small { color: var(--muted); }
+  .wrtext { width: 100%; box-sizing: border-box; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 12px; font: 1rem/1.55 Georgia, "Times New Roman", serif; resize: vertical; }
+  .wrbook { display: grid; gap: 4px; text-align: left; background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; color: var(--text); font: inherit; cursor: pointer; }
+  .wrbook strong { font-family: var(--display); font-size: 1.02rem; }
+  .wrbook small { color: var(--muted); font-size: .82rem; }
+  .wrbar { height: 5px; border-radius: 3px; background: rgba(255,255,255,.08); overflow: hidden; margin-top: 4px; }
+  .wrbar > div { height: 100%; background: var(--amber); }
+  .wrcheck { display: flex; gap: 10px; align-items: flex-start; font-size: .92rem; line-height: 1.35; }
+  .wrcheck input { margin-top: 3px; flex: none; width: 18px; height: 18px; }
+  .outline .obody.draft { font: 1rem/1.55 Georgia, "Times New Roman", serif; white-space: pre-wrap; }
   .addrow input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
   .empty-note { color: var(--muted); font-size: .9rem; margin: 4px 0; }
   @media (min-width: 1001px) and (max-width: 1240px) { header > span { gap: 6px !important; } header .brief-btn { padding: 0 10px 0 9px; font-size: .92rem; gap: 5px; } }
@@ -307,6 +325,10 @@
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg>
       <span>List</span><b class="count" id="listCount"></b>
     </button>
+    <button class="icon-btn brief-btn" id="wrBtn" aria-label="Writing desk">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      <span>Writing</span>
+    </button>
     <button class="icon-btn brief-btn" id="fbBtn" aria-label="Family Bank">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10l9-6 9 6"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8"/><path d="M3 20h18"/></svg>
       <span>Bank</span><b class="count" id="fbCount"></b>
@@ -421,6 +443,13 @@
         <button class="btn" id="trExit">Exit translator</button>
       </span>
     </div>
+    <div class="trbar" id="wrBar" hidden>
+      <span id="wrLabel"></span>
+      <span style="display:flex;gap:8px">
+        <button class="btn" id="wrOpen">Open</button>
+        <button class="btn" id="wrDone">Close desk</button>
+      </span>
+    </div>
     <div class="attchips" id="attChips" hidden></div>
     <div class="typebox">
       <button id="attBtn" class="attbtn" aria-label="Attach a photo or document" title="Attach a photo or document">
@@ -434,6 +463,14 @@
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1"/><path d="M12 18v4"/></svg>
     </button>
   </footer>
+
+  <dialog id="wrDlg">
+    <div class="sheet">
+      <h2 tabindex="-1" autofocus style="outline:none" id="wrTitle">Writing Desk</h2>
+      <div id="wrBody" style="display:grid;gap:10px"></div>
+      <div class="actions"><span></span><button class="btn primary" id="wrClose">Close</button></div>
+    </div>
+  </dialog>
 
   <dialog id="dtDlg">
     <div class="sheet">
@@ -695,9 +732,9 @@
     try {
       const s = JSON.parse(localStorage.getItem(KEY));
       if (s) return { settings: { ...DEFAULTS, ...s.settings }, history: Array.isArray(s.history) ? s.history : [],
-        todos: Array.isArray(s.todos) ? s.todos : [], qnotes: Array.isArray(s.qnotes) ? s.qnotes : [], debts: Array.isArray(s.debts) ? s.debts : [], bills: Array.isArray(s.bills) ? s.bills : [], nextId: s.nextId || 1, tr: s.tr || { on: false, lang: "Spanish" }, study: s.study || null, books: s.books || null, fbank: s.fbank || null, dates: s.dates || null };
+        todos: Array.isArray(s.todos) ? s.todos : [], qnotes: Array.isArray(s.qnotes) ? s.qnotes : [], debts: Array.isArray(s.debts) ? s.debts : [], bills: Array.isArray(s.bills) ? s.bills : [], nextId: s.nextId || 1, tr: s.tr || { on: false, lang: "Spanish" }, study: s.study || null, books: s.books || null, fbank: s.fbank || null, dates: s.dates || null, writing: s.writing || null };
     } catch (e) {}
-    return { settings: { ...DEFAULTS }, history: [], todos: [], qnotes: [], debts: [], bills: [], nextId: 1, tr: { on: false, lang: "Spanish" }, study: null, books: null, fbank: null, dates: null };
+    return { settings: { ...DEFAULTS }, history: [], todos: [], qnotes: [], debts: [], bills: [], nextId: 1, tr: { on: false, lang: "Spanish" }, study: null, books: null, fbank: null, dates: null, writing: null };
   }
   let state = load();
   function writeLocal() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
@@ -1080,7 +1117,7 @@
   }
 
   // ---------- sync between devices ----------
-  const SYNC_SECTIONS = ["settings", "history", "todos", "qnotes", "debts", "bills", "study", "books", "fbank", "dates", "tr", "metals"];
+  const SYNC_SECTIONS = ["settings", "history", "todos", "qnotes", "debts", "bills", "study", "books", "fbank", "dates", "writing", "tr", "metals"];
   const LOCAL_ONLY = ["workerUrl", "accessCode", "voiceURI", "syncOn"];
   const SKEY = "dot.sync";
   let syncMeta = (() => { try { return JSON.parse(localStorage.getItem(SKEY)) || null; } catch (e) { return null; } })() || { times: {}, hashes: {}, rev: 0, lastSync: 0 };
@@ -1103,13 +1140,14 @@
     else if (k === "metals") saveMetals(v || {});
     else state[k] = v;
   }
-  const GUARDED = ["debts", "bills", "todos", "qnotes", "study", "books", "fbank", "dates"];
+  const GUARDED = ["debts", "bills", "todos", "qnotes", "study", "books", "fbank", "dates", "writing"];
   function isEmptySection(k, v) {
     if (v === null || v === undefined) return true;
     if (Array.isArray(v)) return v.length === 0;
     if (k === "books") return !v.list || !v.list.length;
     if (k === "study") return !v.days || !v.days.length;
     if (k === "dates") return !(v.items || []).length;
+    if (k === "writing") return !(v.books || []).some((b) => (b.chapters || []).length || Object.keys(b.check || {}).length || (b.notes || []).length || (b.style || []).length || (b.aiLog || []).length || b.audience || b.voice);
     if (k === "fbank") return !(v.loans || []).length && !(v.ledger || []).length;
     return false;
   }
@@ -1138,7 +1176,7 @@
   function fixIds() {
     let mx = state.nextId || 1;
     const scan = (arr) => (arr || []).forEach((x) => { if (x && x.id >= mx) mx = x.id + 1; });
-    scan(state.todos); scan(state.qnotes); scan(state.debts); scan(state.bills); if (state.fbank) { scan(state.fbank.loans); scan(state.fbank.ledger); } if (state.dates) scan(state.dates.items); if (state.books) { scan(state.books.list); scan(state.books.playbook); }
+    scan(state.todos); scan(state.qnotes); scan(state.debts); scan(state.bills); if (state.fbank) { scan(state.fbank.loans); scan(state.fbank.ledger); } if (state.dates) scan(state.dates.items); if (state.writing) (state.writing.books || []).forEach((b) => { scan([b]); scan(b.chapters); }); if (state.books) { scan(state.books.list); scan(state.books.playbook); }
     state.nextId = mx;
   }
   function syncStatus(msg) { const el = $("syncStatus"); if (el) el.textContent = msg; }
@@ -1149,7 +1187,7 @@
     if (!r.ok) throw new Error(d.error || "status " + r.status);
     return d;
   }
-  function refreshAll() { try { applyPalette(state.settings.palette); render(); renderList(); renderTrBar(); } catch (e) {} }
+  function refreshAll() { try { applyPalette(state.settings.palette); render(); renderList(); renderTrBar(); renderWrBar(); } catch (e) {} }
   async function syncNow(manual) {
     const s = state.settings;
     if (!s.syncOn || !s.workerUrl) { if (manual) syncStatus("Turn on sync and add your Worker address first."); return; }
@@ -1192,7 +1230,10 @@
               if (!backedUp) { backupNow("before sync"); backedUp = true; }
               setSection(k, rd[k]); syncMeta.times[k] = rt; changedLocal = true;
             }
-            else if (lt > rt) pushNeeded = true;
+            else if (lt > rt) {
+              if (k === "writing" && k in rd && isEmptySection(k, sectionValue(k)) && !isEmptySection(k, rd[k])) { setSection(k, rd[k]); syncMeta.times[k] = rt; changedLocal = true; return; }
+              pushNeeded = true;
+            }
           });
         }
         if (changedLocal) { fixIds(); rehash(); writeLocal(); refreshAll(); }
@@ -1243,9 +1284,9 @@
     if (!src) { alert("That backup is empty."); return; }
     if (!confirm("Restore this backup?\n\n" + (describe(src) || "") + "\n\nYour current lists, debts, Bible plan, and reading path will be replaced. A copy of what you have now is saved first.")) return;
     backupNow("before restore");
-    ["todos", "qnotes", "debts", "bills", "study", "books", "fbank", "dates"].forEach((k) => { if (k in src) state[k] = src[k]; });
+    ["todos", "qnotes", "debts", "bills", "study", "books", "fbank", "dates", "writing"].forEach((k) => { if (k in src) state[k] = src[k]; });
     fixIds(); writeLocal();
-    if (state.settings.syncOn) { const now = Date.now(); ["todos", "qnotes", "debts", "bills", "study", "books", "fbank", "dates"].forEach((k) => { syncMeta.times[k] = now; }); rehash(); saveMeta(); syncNow(false); }
+    if (state.settings.syncOn) { const now = Date.now(); ["todos", "qnotes", "debts", "bills", "study", "books", "fbank", "dates", "writing"].forEach((k) => { syncMeta.times[k] = now; }); rehash(); saveMeta(); syncNow(false); }
     refreshAll(); note("Backup restored: " + describe(src) + ".");
     fillBackups();
   }
@@ -1504,6 +1545,335 @@
       row.append(a, r, ok, scE, mark); list.append(row);
     });
     box.append(ttl, sum, bar, btns, list);
+  }
+
+  // ---------- writing desk: editor, critique, ghostwriter, publishing coach ----------
+  const WR_STAGES = ["Drafting", "Revising", "Editing", "Proofreading", "Ready to publish", "Published"];
+  const WR_STATUS = ["Draft", "Edited", "Final"];
+  const WR_CHECK = [
+    ["complete", "Manuscript complete"],
+    ["devedit", "Big-picture edit done (structure, flow, argument or plot)"],
+    ["lineedit", "Line edit done (clarity, wordiness, tone)"],
+    ["proof", "Proofread done (grammar, spelling, consistency)"],
+    ["scripture", "Scripture quotations checked word for word, with translation credits"],
+    ["permissions", "Permissions for quoted material (other Bible versions, books, songs)"],
+    ["title", "Title and subtitle final"],
+    ["bio", "Author bio written"],
+    ["blurb", "Back-cover description written"],
+    ["frontmatter", "Front and back matter (copyright page, dedication, contents, about the author)"],
+    ["isbn", "ISBN decided (free KDP ISBN, or your own from Bowker for your imprint)"],
+    ["copyright", "Copyright registration considered (copyright.gov, optional)"],
+    ["cover", "Cover finished (ebook front, plus full wrap with spine for print)"],
+    ["interior", "Interior formatted (ebook and print)"],
+    ["trim", "Print trim size chosen"],
+    ["account", "KDP account set up with tax and bank information"],
+    ["categories", "Categories and keywords chosen"],
+    ["aidisclose", "AI content question answered honestly"],
+    ["price", "Price and royalty option set"],
+    ["proofcopy", "Printed proof copy ordered and reviewed"],
+    ["launch", "Launch plan (early readers, church, email, social media)"],
+    ["published", "Published"]
+  ];
+  const WR_SEED = [
+    ["Life Lessons from the Life of Abraham", "", "Christian living", "Based on a sermon series"],
+    ["Contend", "A Devotional Commentary on the Epistle of Jude", "Devotional commentary", "Verse by verse, KJV"],
+    ["Strengthening the Inner Man", "Developing the Mind of Christ for a Faithful Life", "Christian living", "Based on a sermon series"],
+    ["The Steps to Faithful Stewardship", "Biblical Financial Foundations Toward Gaining Financial Freedom", "Christian finance", ""],
+    ["The Spectrum Chronicles", "", "Science fiction", ""],
+    ["Breaking the Matrix of the Prince of the Power of the Air", "", "Spiritual warfare", ""]
+  ];
+  function writing() {
+    if (!state.writing) state.writing = { books: [], focus: null };
+    const W = state.writing; if (!Array.isArray(W.books)) W.books = [];
+    if (!W.seeded) { W.seeded = true; WR_SEED.forEach(([title, subtitle, genre, basis]) => W.books.push(newBook(title, subtitle, genre, basis))); }
+    return W;
+  }
+  function newBook(title, subtitle, genre, basis) {
+    return { id: state.nextId++, title, subtitle: subtitle || "", genre: genre || "", basis: basis || "", audience: "", voice: "", stage: "Drafting",
+      fiction: /fiction|novel|sci/i.test(genre || ""), chapters: [], style: [], notes: [], check: {}, aiLog: [], created: todayStr() };
+  }
+  const wrWords = (t) => (String(t || "").match(/\S+/g) || []).length;
+  const chKey = (b, c) => "b" + b.id + "c" + c.id;
+  const fmtN = (n) => Number(n || 0).toLocaleString("en-US");
+  function findBook(ref) {
+    const W = writing(), t = String(ref || "").trim().replace(/^#/, "").toLowerCase(); if (!t) return null;
+    const byId = W.books.find((b) => String(b.id) === t); if (byId) return byId;
+    const exact = W.books.filter((b) => b.title.toLowerCase() === t); if (exact.length === 1) return exact[0];
+    const starts = W.books.filter((b) => b.title.toLowerCase().startsWith(t)); if (starts.length === 1) return starts[0];
+    const has = W.books.filter((b) => b.title.toLowerCase().includes(t) || (b.subtitle || "").toLowerCase().includes(t)); return has.length === 1 ? has[0] : null;
+  }
+  function findChapter(ref, book) {
+    const t = String(ref || "").trim().replace(/^#/, ""); if (!t) return null;
+    const books = book ? [book] : writing().books;
+    for (const b of books) { const c = b.chapters.find((x) => String(x.id) === t); if (c) return { b, c }; }
+    if (book) {
+      const n = parseInt(t, 10); if (n >= 1 && n <= book.chapters.length && /^\d+$/.test(t)) return { b: book, c: book.chapters[n - 1] };
+      const c = book.chapters.find((x) => x.title.toLowerCase() === t.toLowerCase()) || book.chapters.find((x) => x.title.toLowerCase().includes(t.toLowerCase()));
+      if (c) return { b: book, c };
+    }
+    return null;
+  }
+  // chapter text lives in IndexedDB on each device, and syncs one chapter at a time through the Worker
+  let msDbP = null; const msMem = {};
+  function msDb() {
+    if (!msDbP) msDbP = new Promise((res) => { try { const r = indexedDB.open("dot-ms", 1); r.onupgradeneeded = () => r.result.createObjectStore("ch"); r.onsuccess = () => res(r.result); r.onerror = () => res(null); } catch (e) { res(null); } });
+    return msDbP;
+  }
+  async function msLocalGet(k) {
+    const db = await msDb(); if (!db) return msMem[k] || null;
+    return new Promise((res) => { try { const q = db.transaction("ch").objectStore("ch").get(k); q.onsuccess = () => res(q.result || msMem[k] || null); q.onerror = () => res(msMem[k] || null); } catch (e) { res(msMem[k] || null); } });
+  }
+  async function msLocalPut(k, v) {
+    msMem[k] = v; const db = await msDb(); if (!db) return;
+    await new Promise((res) => { try { const tx = db.transaction("ch", "readwrite"); tx.objectStore("ch").put(v, k); tx.oncomplete = res; tx.onerror = res; } catch (e) { res(); } });
+  }
+  const MSQ = "dot.msq";
+  const msQueue = () => { try { return JSON.parse(localStorage.getItem(MSQ)) || []; } catch (e) { return []; } };
+  const msQueueSet = (q) => { try { localStorage.setItem(MSQ, JSON.stringify(q)); } catch (e) {} };
+  let msFlushing = false;
+  async function msFlush() {
+    const s = state.settings; if (msFlushing || !s.syncOn || !s.workerUrl) return;
+    let q = msQueue(); if (!q.length) return; msFlushing = true;
+    try {
+      while (q.length) {
+        const batch = q.slice(0, 10), items = [];
+        for (const k of batch) { const v = await msLocalGet(k); if (v) items.push({ id: k, text: v.text, updated: v.updated }); }
+        if (items.length) await syncPost({ action: "ms_put", items });
+        q = msQueue().filter((k) => !batch.includes(k)); msQueueSet(q);
+      }
+    } catch (e) { /* try again later */ } finally { msFlushing = false; }
+  }
+  async function saveChapterText(b, c, text) {
+    const updated = Date.now();
+    await msLocalPut(chKey(b, c), { text, updated });
+    c.words = wrWords(text); c.updated = updated;
+    const q = msQueue(); if (!q.includes(chKey(b, c))) { q.push(chKey(b, c)); msQueueSet(q); }
+    save(); msFlush();
+  }
+  async function loadChapterText(b, c) {
+    const k = chKey(b, c), loc = await msLocalGet(k);
+    if (loc && (loc.updated || 0) >= (c.updated || 0)) return loc.text;
+    const s = state.settings;
+    if (s.workerUrl && s.syncOn) {
+      try { const r = await syncPost({ action: "ms_get", ids: [k] }); const v = r.chapters && r.chapters[k]; if (v) { await msLocalPut(k, v); return v.text; } } catch (e) {}
+    }
+    return loc ? loc.text : "";
+  }
+  let focusCache = { key: "", text: "" };
+  async function prepWriting() {
+    const W = writing(), f = W.focus; if (!f) { focusCache = { key: "", text: "" }; return; }
+    const hit = findChapter(f.ch); if (!hit) { W.focus = null; renderWrBar(); return; }
+    focusCache = { key: chKey(hit.b, hit.c), text: await loadChapterText(hit.b, hit.c) };
+  }
+  function setFocus(b, c) { writing().focus = c ? { book: b.id, ch: c.id } : { book: b.id, ch: null }; save(); renderWrBar(); }
+  function renderWrBar() {
+    const bar = $("wrBar"); if (!bar) return;
+    const f = state.writing && state.writing.focus, b = f && findBook(f.book), c = f && f.ch && findChapter(f.ch, b);
+    bar.hidden = !b;
+    if (b) $("wrLabel").textContent = "✒️ Writing desk: " + b.title + (c ? " · Chapter " + (b.chapters.indexOf(c.c) + 1) + ": " + c.c.title : " · whole book");
+  }
+  function checkProgress(b) { const done = WR_CHECK.filter(([k]) => b.check[k]).length; return { done, total: WR_CHECK.length }; }
+  function aiSummary(b) {
+    const log = b.aiLog || [], words = log.reduce((a, x) => a + (x.words || 0), 0), chs = new Set(log.map((x) => x.ch)).size;
+    return { words, chs, any: log.length > 0 };
+  }
+  function applyWriteCommand(cmd, arg) {
+    const W = writing(), p = String(arg || "").split("|").map((x) => x.trim());
+    if (cmd === "WRITE_BOOK_ADD") { if (!p[0]) return null; const b = newBook(p[0], p[1], p[2], ""); W.books.push(b); return "Added book to your writing desk: " + b.title; }
+    if (cmd === "WRITE_FOCUS_OFF") { if (!W.focus) return null; W.focus = null; renderWrBar(); return "Writing desk closed"; }
+    if (cmd === "WRITE_SUMMARY" || cmd === "WRITE_STATUS") {
+      const hit = findChapter(p[0]); if (!hit) return null;
+      if (cmd === "WRITE_SUMMARY") { if (!p[1]) return null; hit.c.summary = p[1].slice(0, 600); return null; }
+      const st = WR_STATUS.find((x) => x.toLowerCase() === (p[1] || "").toLowerCase()); if (!st) return null; hit.c.status = st; return hit.b.title + ", " + hit.c.title + ": marked " + st;
+    }
+    const b = findBook(p[0]); if (!b) return null;
+    if (cmd === "WRITE_FOCUS") { const hit = p[1] ? findChapter(p[1], b) : null; setFocus(b, hit ? hit.c : null); return "Writing desk open: " + b.title + (hit ? ", " + hit.c.title : ""); }
+    if (cmd === "WRITE_CHAPTER_ADD") { if (!p[1]) return null; const c = { id: state.nextId++, title: p[1], words: 0, updated: 0, status: "Draft", summary: "" }; b.chapters.push(c); return "Added chapter to " + b.title + ": " + c.title + " (#" + c.id + ")"; }
+    if (cmd === "WRITE_STYLE") { if (!p[1] || b.style.includes(p[1])) return null; b.style.push(p[1]); return "Style sheet for " + b.title + ": " + p[1]; }
+    if (cmd === "WRITE_NOTE") { if (!p[1]) return null; b.notes.push({ date: todayStr(), text: p[1] }); if (b.notes.length > 60) b.notes = b.notes.slice(-60); return "Editor's note saved for " + b.title; }
+    if (cmd === "WRITE_STAGE") { const st = WR_STAGES.find((x) => x.toLowerCase() === (p[1] || "").toLowerCase()); if (!st) return null; b.stage = st; return b.title + " stage: " + st; }
+    if (cmd === "WRITE_CHECK") {
+      const t = (p[1] || "").toLowerCase(), item = WR_CHECK.find(([k, l]) => k === t || l.toLowerCase().startsWith(t) || l.toLowerCase().includes(t)); if (!item) return null;
+      const on = !/^(undo|no|not|off|false)/i.test(p[2] || ""); b.check[item[0]] = on ? todayStr() : undefined; if (!on) delete b.check[item[0]];
+      return b.title + ": " + (on ? "✓ " : "unchecked ") + item[1];
+    }
+    if (cmd === "WRITE_DETAILS") {
+      const field = (p[1] || "").toLowerCase(), val = p.slice(2).join(" | ");
+      const map = { title: "title", subtitle: "subtitle", genre: "genre", audience: "audience", voice: "voice", basis: "basis" };
+      if (!map[field]) return null; b[map[field]] = val; return b.title + ": " + field + " updated";
+    }
+    return null;
+  }
+  function writingForPrompt() {
+    const W = writing(), f = W.focus, fb = f && findBook(f.book);
+    const lines = W.books.map((b) => {
+      const pr = checkProgress(b), words = b.chapters.reduce((a, c) => a + (c.words || 0), 0), next = WR_CHECK.filter(([k]) => !b.check[k]).slice(0, 3).map(([, l]) => l);
+      return "- #" + b.id + " " + b.title + (b.subtitle ? ": " + b.subtitle : "") + " [" + (b.genre || "genre not set") + (b.basis ? "; " + b.basis : "") + "] stage " + b.stage + "; " + b.chapters.length + " chapter" + (b.chapters.length === 1 ? "" : "s") + ", " + fmtN(words) + " words; checklist " + pr.done + " of " + pr.total + (next.length ? "; next: " + next.join("; ") : "");
+    });
+    const out = ["Books (counts calculated by the app):", lines.join("\n") || "- none yet"];
+    if (fb) {
+      out.push("WORKING BOOK: #" + fb.id + " " + fb.title + (fb.audience ? ". Audience: " + fb.audience : "") + (fb.voice ? ". Author's voice notes: " + fb.voice : ""));
+      out.push("Chapters:\n" + (fb.chapters.map((c, i) => "  " + (i + 1) + ". #" + c.id + " " + c.title + " — " + c.status + ", " + fmtN(c.words) + " words" + (c.summary ? ". Summary: " + c.summary : "")).join("\n") || "  none yet"));
+      if (fb.style.length) out.push("Style sheet:\n" + fb.style.map((x) => "  - " + x).join("\n"));
+      if (fb.notes.length) out.push("Recent editor's notes:\n" + fb.notes.slice(-8).map((n) => "  - " + n.date + ": " + n.text).join("\n"));
+      const ai = aiSummary(fb); out.push("AI-drafted text recorded for this book: " + (ai.any ? fmtN(ai.words) + " words across " + ai.chs + " chapter" + (ai.chs === 1 ? "" : "s") : "none"));
+      const hit = f.ch && findChapter(f.ch, fb);
+      if (hit && focusCache.key === chKey(hit.b, hit.c)) {
+        const t = focusCache.text || "", cap = 60000;
+        out.push("ACTIVE CHAPTER: #" + hit.c.id + " Chapter " + (fb.chapters.indexOf(hit.c) + 1) + ", \"" + hit.c.title + "\", " + hit.c.status + ", " + fmtN(wrWords(t)) + " words." +
+          (t ? (t.length > cap ? " Only the first part fits; tell him the rest was not included." : "") + "\n<<<CHAPTER TEXT\n" + t.slice(0, cap) + "\nCHAPTER TEXT>>>" : " The chapter has no text yet."));
+      }
+    }
+    return out.join("\n");
+  }
+  function addDraftToChapter(blockRef, body, mode, kind) {
+    const hit = findChapter(blockRef); if (!hit) { note("I couldn't find that chapter. Open the Writing desk and paste it in."); return false; }
+    (async () => {
+      const cur = await loadChapterText(hit.b, hit.c);
+      const text = mode === "replace" ? body : (cur ? cur.replace(/\s+$/, "") + "\n\n" : "") + body;
+      await saveChapterText(hit.b, hit.c, text);
+      if (kind === "draft") { hit.b.aiLog.push({ date: todayStr(), ch: hit.c.id, words: wrWords(body), label: hit.c.title }); hit.c.ai = true; }
+      save(); renderWriting();
+      note((mode === "replace" ? "Replaced the text of " : "Added to ") + hit.b.title + ", " + hit.c.title + (kind === "draft" ? ". Recorded as AI-drafted text for the KDP question." : "."));
+    })();
+    return true;
+  }
+  function loadMammoth() {
+    if (window.mammoth) return Promise.resolve(window.mammoth);
+    return new Promise((res, rej) => { const sc = document.createElement("script"); sc.src = "https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"; sc.onload = () => res(window.mammoth); sc.onerror = () => rej(new Error("Couldn't load the Word reader. Check your internet connection.")); document.head.append(sc); });
+  }
+  async function fileToText(file) {
+    if (/\.docx$/i.test(file.name)) {
+      const m = await loadMammoth(); const buf = await file.arrayBuffer();
+      const r = await m.convertToHtml({ arrayBuffer: buf });
+      const div = document.createElement("div"); div.innerHTML = r.value;
+      const parts = []; div.childNodes.forEach((n) => { const t = (n.textContent || "").trim(); if (!t) return; parts.push(/^H[1-6]$/.test(n.nodeName) ? "\n## " + t : t); });
+      return parts.join("\n\n").replace(/^\n+/, "");
+    }
+    if (/\.(txt|md|text)$/i.test(file.name) || /^text\//.test(file.type)) return await file.text();
+    if (/\.doc$/i.test(file.name)) throw new Error("Older .doc files can't be read. In Word or Pages, save it as .docx and try again.");
+    if (/\.pages$/i.test(file.name)) throw new Error("Pages files can't be read directly. In Pages, use Export To → Word, then add the .docx here.");
+    throw new Error("Use a Word (.docx) or text file. For a PDF, send it to DOT with the paperclip instead.");
+  }
+  function splitManuscript(text) {
+    const lines = String(text).split("\n"), out = []; let cur = null;
+    const isHead = (l) => /^##\s+\S/.test(l) || /^\s*(chapter|part|day|lesson|session)\s+([0-9ivxlc]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/i.test(l);
+    lines.forEach((l) => { if (isHead(l) && l.trim().length < 140) { cur = { title: l.replace(/^##\s+/, "").trim(), text: [] }; out.push(cur); } else { if (!cur) { cur = { title: "Opening", text: [] }; out.push(cur); } cur.text.push(l); } });
+    return out.map((c) => ({ title: c.title, text: c.text.join("\n").replace(/^\s+|\s+$/g, "") })).filter((c) => c.text || out.length === 1);
+  }
+  function downloadBook(b) {
+    (async () => {
+      const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      let html = "<html><head><meta charset='utf-8'><title>" + esc(b.title) + "</title></head><body style='font-family:Georgia,serif;font-size:12pt;line-height:1.5'>";
+      html += "<h1 style='text-align:center'>" + esc(b.title) + "</h1>" + (b.subtitle ? "<h2 style='text-align:center;font-weight:normal'>" + esc(b.subtitle) + "</h2>" : "") + "<p style='text-align:center'>" + esc(state.settings.callsign || "Floyd E. Dorsey Jr.") + "</p>";
+      for (const c of b.chapters) {
+        const t = await loadChapterText(b, c);
+        html += "<h2 style='page-break-before:always'>" + esc(c.title) + "</h2>" + t.split(/\n{2,}/).map((p) => p.trim() ? "<p>" + esc(p.trim()).replace(/\n/g, "<br>") + "</p>" : "").join("");
+      }
+      html += "</body></html>";
+      const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([html], { type: "application/msword" }));
+      a.download = b.title.replace(/[^\w\- ]+/g, "").trim().slice(0, 60) + ".doc"; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+    })();
+  }
+  let wrBookId = null, wrEdit = null;
+  function renderWriting() {
+    const box = $("wrBody"); if (!box) return;
+    const W = writing(); box.innerHTML = "";
+    const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt !== undefined) e.textContent = txt; return e; };
+    const btn = (label, fn, primary) => { const b = el("button", "btn" + (primary ? " primary" : ""), label); b.onclick = fn; return b; };
+    const input = (val, ph) => { const i = el("input"); i.value = val || ""; i.placeholder = ph || ""; return i; };
+    const b = wrBookId && W.books.find((x) => x.id === wrBookId);
+    $("wrTitle").textContent = b ? b.title : "Writing Desk";
+    if (!b) {
+      box.append(el("p", "empty-note", "Your books in progress. Tap a book to manage its chapters, publishing checklist, and editor's notes. To work with DOT, open a chapter and tap Work on this with DOT, or just ask her, such as \"Let's work on Contend, chapter 2.\""));
+      W.books.forEach((bk) => {
+        const words = bk.chapters.reduce((a, c) => a + (c.words || 0), 0), pr = checkProgress(bk);
+        const card = el("button", "wrbook"); card.onclick = () => { wrBookId = bk.id; wrEdit = null; renderWriting(); };
+        const t = el("strong", "", bk.title); const sub = el("small", "", (bk.subtitle ? bk.subtitle + " · " : "") + (bk.genre || ""));
+        const meta = el("small", "", bk.stage + " · " + bk.chapters.length + " chapter" + (bk.chapters.length === 1 ? "" : "s") + " · " + fmtN(words) + " words · checklist " + pr.done + "/" + pr.total);
+        const bar = el("div", "wrbar"); const fill = el("div"); fill.style.width = Math.round(100 * pr.done / pr.total) + "%"; bar.append(fill);
+        card.append(t, sub, meta, bar); box.append(card);
+      });
+      const nr = el("div", "addrow"); const ni = input("", "New book title"); nr.append(ni, btn("Add book", () => { if (!ni.value.trim()) return; W.books.push(newBook(ni.value.trim(), "", "", "")); save(); renderWriting(); }));
+      box.append(nr); return;
+    }
+    // chapter editor
+    if (wrEdit) {
+      const hit = findChapter(wrEdit, b); if (!hit) { wrEdit = null; renderWriting(); return; }
+      const c = hit.c;
+      const tt = input(c.title, "Chapter title");
+      const ta = el("textarea", "wrtext"); ta.rows = 18; ta.placeholder = "Chapter text"; ta.value = "Loading…"; ta.disabled = true;
+      loadChapterText(b, c).then((t) => { ta.value = t; ta.disabled = false; cnt.textContent = fmtN(wrWords(t)) + " words"; });
+      const cnt = el("small", "", ""); ta.oninput = () => (cnt.textContent = fmtN(wrWords(ta.value)) + " words");
+      const st = el("select"); WR_STATUS.forEach((x) => st.append(new Option(x, x))); st.value = c.status;
+      const row = el("div", "addrow"); row.append(btn("Save", async () => { c.title = tt.value.trim() || c.title; c.status = st.value; await saveChapterText(b, c, ta.value); note("Saved " + c.title + " (" + fmtN(c.words) + " words)."); }, true),
+        btn("Work on this with DOT", async () => { c.title = tt.value.trim() || c.title; c.status = st.value; if (!ta.disabled) await saveChapterText(b, c, ta.value); setFocus(b, c); $("wrDlg").close(); note("Writing desk open: " + b.title + ", " + c.title + ". Ask DOT to edit, critique, or continue it."); }),
+        btn("Back", () => { wrEdit = null; renderWriting(); }));
+      box.append(el("div", "bstage", "Chapter " + (b.chapters.indexOf(c) + 1) + (c.ai ? " · contains AI-drafted text" : "")), tt, st, ta, cnt, row);
+      return;
+    }
+    const top = el("div", "addrow"); top.append(btn("‹ All books", () => { wrBookId = null; renderWriting(); }), btn("Work on whole book with DOT", () => { setFocus(b, null); $("wrDlg").close(); note("Writing desk open: " + b.title + ". Ask for a critique, a plan, or publishing help."); }));
+    box.append(top);
+    // chapters
+    const words = b.chapters.reduce((a, c) => a + (c.words || 0), 0);
+    box.append(el("div", "bstage", "Chapters · " + fmtN(words) + " words"));
+    if (!b.chapters.length) box.append(el("p", "empty-note", "No chapters yet. Paste one below, add a Word file, or import a whole manuscript."));
+    b.chapters.forEach((c, i) => {
+      const r = el("div", "dtrow"); const mid = el("div", "dtmid");
+      mid.append(el("strong", "", (i + 1) + ". " + c.title), el("small", "", c.status + " · " + fmtN(c.words) + " words" + (c.ai ? " · AI-drafted text" : "") + (c.summary ? " · " + c.summary.slice(0, 90) + (c.summary.length > 90 ? "…" : "") : "")));
+      r.append(mid, btn("Open", () => { wrEdit = c.id; renderWriting(); }),
+        btn("↑", () => { if (!i) return; b.chapters.splice(i - 1, 0, b.chapters.splice(i, 1)[0]); save(); renderWriting(); }),
+        btn("Delete", () => { if (!confirm("Delete " + c.title + "? Its text is removed from DOT.")) return; b.chapters.splice(i, 1); saveChapterText(b, c, ""); if (W.focus && W.focus.ch === c.id) { W.focus = null; renderWrBar(); } save(); renderWriting(); }));
+      box.append(r);
+    });
+    // add chapter
+    const ad = el("details", "fbdet"); ad.append(el("summary", "", "Add a chapter"));
+    const at = input("", "Chapter title"); const ax = el("textarea", "wrtext"); ax.rows = 6; ax.placeholder = "Paste the chapter text (optional; leave empty to have DOT help draft it)";
+    const af = el("input"); af.type = "file"; af.accept = ".docx,.txt,.md,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    const am = el("small", "", ""); am.style.color = "var(--muted)";
+    af.onchange = async () => { const f = af.files[0]; if (!f) return; am.textContent = "Reading " + f.name + "…"; try { ax.value = await fileToText(f); if (!at.value) at.value = f.name.replace(/\.[^.]+$/, ""); am.textContent = fmtN(wrWords(ax.value)) + " words read from " + f.name; } catch (e) { am.textContent = e.message; } };
+    ad.append(at, ax, af, am, btn("Add chapter", async () => { if (!at.value.trim()) { am.textContent = "Give the chapter a title."; return; } const c = { id: state.nextId++, title: at.value.trim(), words: 0, updated: 0, status: "Draft", summary: "" }; b.chapters.push(c); await saveChapterText(b, c, ax.value); renderWriting(); note("Added " + c.title + " (" + fmtN(c.words) + " words) to " + b.title + "."); }, true));
+    box.append(ad);
+    // import manuscript
+    const im = el("details", "fbdet"); im.append(el("summary", "", "Import a whole manuscript (Word or text)"));
+    const imf = el("input"); imf.type = "file"; imf.accept = af.accept; const imm = el("small", "", "Chapters are split at headings or at lines that start with Chapter, Part, Day, Lesson, or Session."); imm.style.color = "var(--muted)";
+    imf.onchange = async () => {
+      const f = imf.files[0]; if (!f) return; imm.textContent = "Reading " + f.name + "…";
+      try {
+        const parts = splitManuscript(await fileToText(f)); if (!parts.length) { imm.textContent = "No text found in that file."; return; }
+        if (!confirm("Add " + parts.length + " chapter" + (parts.length === 1 ? "" : "s") + " from " + f.name + " to " + b.title + "?")) { imm.textContent = ""; return; }
+        for (const pt of parts) { const c = { id: state.nextId++, title: pt.title.slice(0, 120), words: 0, updated: 0, status: "Draft", summary: "" }; b.chapters.push(c); await saveChapterText(b, c, pt.text); }
+        renderWriting(); note("Imported " + parts.length + " chapters into " + b.title + ".");
+      } catch (e) { imm.textContent = e.message; }
+    };
+    im.append(imf, imm); box.append(im);
+    // details
+    const dd = el("details", "fbdet"); dd.append(el("summary", "", "Book details"));
+    const fields = [["title", "Title"], ["subtitle", "Subtitle"], ["genre", "Genre or category"], ["basis", "Source, such as \"Based on a sermon series\""], ["audience", "Who the book is for"], ["voice", "Your voice and style, for DOT's drafting"]];
+    const ins = {}; fields.forEach(([k, ph]) => { const i = input(b[k], ph); ins[k] = i; dd.append(i); });
+    const sg = el("select"); WR_STAGES.forEach((x) => sg.append(new Option(x, x))); sg.value = b.stage; dd.append(sg);
+    dd.append(btn("Save details", () => { fields.forEach(([k]) => (b[k] = ins[k].value.trim())); if (!b.title) b.title = "Untitled"; b.stage = sg.value; b.fiction = /fiction|novel|sci/i.test(b.genre); save(); renderWriting(); note("Saved details for " + b.title + "."); }, true),
+      btn("Delete this book", () => { if (!confirm("Delete " + b.title + " and all its chapters from DOT?")) return; b.chapters.forEach((c) => saveChapterText(b, c, "")); W.books = W.books.filter((x) => x !== b); if (W.focus && W.focus.book === b.id) { W.focus = null; renderWrBar(); } wrBookId = null; save(); renderWriting(); }));
+    box.append(dd);
+    // checklist
+    const pr = checkProgress(b);
+    const cd = el("details", "fbdet"); cd.append(el("summary", "", "Self-publishing checklist (" + pr.done + " of " + pr.total + ")"));
+    WR_CHECK.forEach(([k, l]) => { const lab = el("label", "wrcheck"); const cb = el("input"); cb.type = "checkbox"; cb.checked = !!b.check[k]; cb.onchange = () => { if (cb.checked) b.check[k] = todayStr(); else delete b.check[k]; save(); }; lab.append(cb, el("span", "", l + (b.check[k] ? " (" + b.check[k] + ")" : ""))); cd.append(lab); });
+    box.append(cd);
+    // AI record
+    const ai = aiSummary(b), ad2 = el("details", "fbdet"); ad2.append(el("summary", "", "AI disclosure record"));
+    ad2.append(el("p", "empty-note", ai.any
+      ? "DOT recorded " + fmtN(ai.words) + " words of AI-drafted text in " + ai.chs + " chapter" + (ai.chs === 1 ? "" : "s") + ". Based on this record, answer Yes to KDP's question about AI-generated text, even if you edited it afterward. Review Amazon's current wording when you publish."
+      : "No AI-drafted text recorded. Editing, critique, and suggestions on your own writing count as AI-assisted, which KDP does not require you to disclose. If you use AI-made images, such as a cover, that is disclosed separately."));
+    (b.aiLog || []).slice(-30).reverse().forEach((x) => ad2.append(el("small", "", x.date + " · " + x.label + " · " + fmtN(x.words) + " words")));
+    box.append(ad2);
+    // style + notes
+    const sd = el("details", "fbdet"); sd.append(el("summary", "", "Style sheet and editor's notes"));
+    b.style.forEach((x, i) => { const r = el("div", "dtrow"); r.append(el("div", "dtmid", x), btn("Remove", () => { b.style.splice(i, 1); save(); renderWriting(); })); sd.append(r); });
+    const si = input("", "Add a style rule, such as \"Scripture in KJV unless noted\""); sd.append(si, btn("Add rule", () => { if (si.value.trim()) { b.style.push(si.value.trim()); save(); renderWriting(); } }));
+    b.notes.slice().reverse().forEach((n) => sd.append(el("small", "", n.date + " · " + n.text)));
+    box.append(sd);
+    const ex = el("div", "addrow"); ex.append(btn("Download manuscript (Word)", () => downloadBook(b))); box.append(ex);
   }
 
   // ---------- silver buying windows and premium ----------
@@ -2322,8 +2692,10 @@
   // ---------- log ----------
   function splitBlocks(text) {
     const blocks = [];
-    let spoken = String(text).replace(/\[\[\s*OUTLINE:?\s*([^\]]*)\]\]([\s\S]*?)(?:\[\[\s*\/\s*OUTLINE[^\]]*\]\]|$)/gi, (m, title, body) => {
-      blocks.push({ title: title.trim() || "Outline", body: body.replace(/^\n+|\s+$/g, "") });
+    let spoken = String(text).replace(/\[\[\s*(OUTLINE|DRAFT|EDIT):?\s*([^\]]*)\]\]([\s\S]*?)(?:\[\[\s*\/\s*(?:OUTLINE|DRAFT|EDIT)[^\]]*\]\]|$)/gi, (m, kind, title, body) => {
+      const k = kind.toLowerCase(); let ref = "", ttl = title.trim();
+      if (k !== "outline") { const pp = ttl.split("|").map((x) => x.trim()); ref = pp[0].replace(/^#/, ""); ttl = pp.slice(1).join(" | ") || (k === "draft" ? "Draft" : "Edited text"); }
+      blocks.push({ kind: k, ref, title: ttl || "Outline", body: body.replace(/^\n+|\s+$/g, "") });
       return "";
     });
     spoken = spoken.replace(/\n{3,}/g, "\n\n").trim();
@@ -2337,8 +2709,23 @@
     copy.onclick = async () => { try { await navigator.clipboard.writeText(b.title + "\n\n" + b.body); copy.textContent = "Copied"; } catch (e) { copy.textContent = "Copy failed"; } setTimeout(() => (copy.textContent = "Copy"), 1800); };
     const keep = document.createElement("button"); keep.className = "btn"; keep.textContent = "Save to notes";
     keep.onclick = () => { applyListCommand("NOTE", b.title + "\n" + b.body); save(); renderList(); keep.textContent = "Saved"; keep.disabled = true; };
-    head.append(h, copy, keep);
-    const pre = document.createElement("div"); pre.className = "obody"; pre.textContent = b.body;
+    if (b.kind === "draft" || b.kind === "edit") {
+      const hit = b.ref && findChapter(b.ref);
+      h.textContent = (b.kind === "draft" ? "✒️ Draft" : "✏️ Edited") + (hit ? " · " + hit.b.title + ", " + hit.c.title : "") + (b.title ? " · " + b.title : "") + " (" + fmtN(wrWords(b.body)) + " words)";
+      keep.textContent = b.kind === "draft" ? "Add to chapter" : "Replace chapter text";
+      keep.onclick = () => { if (b.kind === "edit" && !confirm("Replace the chapter text with this edited version? A copy of the old text is not kept.")) return; if (addDraftToChapter(b.ref, b.body, b.kind === "draft" ? "append" : "replace", b.kind)) { keep.textContent = "Saved"; keep.disabled = true; } };
+      if (!hit) {
+        const fb = state.writing && state.writing.focus && findBook(state.writing.focus.book);
+        if (b.kind === "draft" && fb) {
+          keep.textContent = "Save as new chapter in " + fb.title;
+          keep.onclick = () => { const nm = prompt("Chapter title", b.title || "New chapter"); if (nm === null) return; const c = { id: state.nextId++, title: nm.trim() || "New chapter", words: 0, updated: 0, status: "Draft", summary: "" }; fb.chapters.push(c); save(); if (addDraftToChapter(String(c.id), b.body, "append", "draft")) { keep.textContent = "Saved"; keep.disabled = true; } };
+        } else { keep.disabled = true; keep.title = "No chapter linked"; }
+      }
+      head.append(h, copy, keep);
+      if (b.kind === "draft" && hit) { const rp = document.createElement("button"); rp.className = "btn"; rp.textContent = "Replace chapter text";
+        rp.onclick = () => { if (!confirm("Replace the whole chapter with this draft?")) return; if (addDraftToChapter(b.ref, b.body, "replace", "draft")) { rp.textContent = "Saved"; rp.disabled = true; keep.disabled = true; } }; head.append(rp); }
+    } else head.append(h, copy, keep);
+    const pre = document.createElement("div"); pre.className = "obody" + (b.kind === "draft" || b.kind === "edit" ? " draft" : ""); pre.textContent = b.body;
     card.append(head, pre);
     return card;
   }
@@ -2483,6 +2870,22 @@ When he says an episode is finished, add one final separate line in exactly this
 When ${name} asks to start translator mode, or to translate everything he says into a language, confirm in one short sentence and add one final separate line in exactly this form, naming the language in English: TRANSLATE_ON: Spanish
 Never read that line aloud. For a single phrase, such as "how do you say God bless you in Spanish," answer normally with the translation and one short pronunciation tip.`,
 
+      `WRITING DESK
+${name} is an author preparing his books for self-publishing, mainly through Amazon KDP. You serve as his editor, author critique partner, ghostwriter, and publishing coach.
+${writingForPrompt()}
+ROLES
+- Editor. Work at the level he asks for. Big-picture editing: structure, flow, argument or plot, chapter order, what to cut or expand. Line editing: clarity, wordiness, repetition, rhythm, tone, consistency with his voice. Proofreading: grammar, spelling, punctuation, and consistency with the style sheet. Explain your most important changes briefly. Preserve his voice, theology, and meaning; never change doctrine or the sense of a passage without flagging it.
+- Author critique. Speak as a demanding acquisitions editor would: what works, what is weak, who the reader is, what similar books readers would compare it to, and whether it is ready. Be specific and candid, with the passage or chapter you mean, and end with the three changes that would help most. For nonfiction, judge clarity of purpose, structure, biblical accuracy, application, and reader takeaway. For fiction, judge premise, plot and pacing, characters and their arcs, point of view, dialogue, worldbuilding, and stakes.
+- Ghostwriter. Draft only when he asks. Write in his voice, learned from his chapters and his voice notes. Never invent quotations, statistics, stories about real people, or citations; leave a clearly marked placeholder such as [add illustration] or [verify source] instead. Quote Scripture only from get_scripture results, in the translation the book uses.
+- Publishing coach. Guide him through self-publishing step by step using his checklist above: front matter and copyright page, ISBN choices, cover, interior formatting, trim size, categories and keywords, description, pricing, the AI content question, proof copy, and launch. For any current rule, price, royalty rate, or platform requirement, check with web search first, report it from that result, and name the source; never state those from memory.
+AI DISCLOSURE: KDP asks authors whether a book contains AI-generated text. Text you draft is AI-generated even after he edits it; your edits and suggestions on his own writing are AI-assisted. That is why drafts and edits must go in the blocks below, so the app keeps an accurate record for him.
+BLOCKS (shown on screen with buttons, never read aloud):
+- New prose you wrote, such as a drafted section, scene, or chapter: [[DRAFT: chapter id | short label]] then the text, then [[/DRAFT]] on its own line. If no chapter exists for it yet, first add one with WRITE_CHAPTER_ADD, and use the same id the app reports only in later replies; until then, write [[DRAFT: none | label]].
+- His own text after line editing or proofreading, ready to replace the chapter: [[EDIT: chapter id | short label]] then the full edited text, then [[/EDIT]]. If your changes add substantial new passages, use DRAFT for those passages instead.
+- Critiques, plans, outlines, blurbs, author bios, and checklists go in an [[OUTLINE: title]] block.
+Write plain text inside blocks, with blank lines between paragraphs and no markdown. Outside the blocks, say in one to three spoken sentences what you did and suggest the next step. Edit or critique only text you can actually see in this conversation; if the chapter text is not included, ask him to open it on the writing desk or paste it.
+Record changes with one final line each, never read aloud: WRITE_FOCUS: book id or title | chapter number or title (opens a chapter so its text is included next time); WRITE_FOCUS_OFF; WRITE_CHAPTER_ADD: book id | chapter title; WRITE_SUMMARY: chapter id | two-sentence summary (add one whenever you have read a chapter that lacks a summary or has changed); WRITE_STATUS: chapter id | Draft, Edited, or Final; WRITE_STAGE: book id | Drafting, Revising, Editing, Proofreading, Ready to publish, or Published; WRITE_CHECK: book id | checklist item | done or undo (only when he says it is done); WRITE_STYLE: book id | style rule; WRITE_NOTE: book id | editor's note to remember; WRITE_DETAILS: book id | title, subtitle, genre, audience, voice, or basis | new value; WRITE_BOOK_ADD: title | subtitle | genre.`,
+
       `BIRTHDAYS AND ANNIVERSARIES
 ${name} keeps birthdays and anniversaries for his family and church members. The app calculates every date, day count, age, and number of years:
 ${datesForPrompt()}
@@ -2565,7 +2968,7 @@ Never read the STACK line aloud or mention it; the system removes it and updates
       `Honesty outranks agreement. If a plan carries risk, state the risk plainly and respectfully, then help.`,
 
       `FORMAT
-Your replies are spoken aloud. ${["Keep answers very short: one or two sentences unless he asks for more.", "Keep most answers to one to four sentences unless he asks for more detail.", "Give fuller answers, usually four to eight sentences with helpful context, while staying focused."][s.length ?? 1]} Never use markdown, bullet points, headings, emoji, or web addresses. Write numbers, times, and abbreviations the way they should be spoken. The only exception is the outline block described under scripture and sermon prep, which is shown on screen and not read aloud.`,
+Your replies are spoken aloud. ${["Keep answers very short: one or two sentences unless he asks for more.", "Keep most answers to one to four sentences unless he asks for more detail.", "Give fuller answers, usually four to eight sentences with helpful context, while staying focused."][s.length ?? 1]} Never use markdown, bullet points, headings, emoji, or web addresses. Write numbers, times, and abbreviations the way they should be spoken. The only exceptions are the outline block described under scripture and sermon prep and the draft and edit blocks described under the writing desk, which are shown on screen and not read aloud.`,
 
       `For reference only: the current local date and time is ${now}, Pacific time. Do not state the date or time unless ${name} asks for it or the task genuinely depends on it, such as scheduling. Never comment on or correct a time you gave earlier.`,
       s.notes ? `Standing information from ${name}:\n${s.notes}` : ""
@@ -2613,12 +3016,16 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
     const empty = logEl.querySelector(".empty"); if (empty) empty.remove();
     logEl.append(msgEl("user", text)); scrollDown();
     setMode("thinking");
+    try { await prepWriting(); } catch (e) {}
     const verifiedNote = (m) => {
       if (m.role !== "assistant" || !m.meta || !m.meta.checked || !m.meta.checked.length) return "";
       const hosts = (m.meta.sources || []).map((x) => { try { return new URL(x.url).hostname.replace(/^www\./, ""); } catch (e) { return ""; } }).filter(Boolean);
       return "\n\n[Verified at the time with: " + m.meta.checked.join(", ") + (hosts.length ? "; sources: " + hosts.join(", ") : "") + "]";
     };
-    const messages = [...state.history.filter((m) => !m.tr).slice(-20).map((m) => ({ role: m.role, content: m.content + verifiedNote(m) })), { role: "user", content: text }];
+    const hist = state.history.filter((m) => !m.tr).slice(-20);
+    const trimBlocks = (c, keep) => keep ? c : String(c).replace(/(\[\[\s*(DRAFT|EDIT)[^\]]*\]\])([\s\S]*?)(\[\[\s*\/\s*(DRAFT|EDIT)[^\]]*\]\])/gi, (m, a, k, body, z) => body.length > 1500 ? a + "\n[" + wrWords(body) + " words shown on screen earlier; not repeated here]\n" + z : m);
+    const lastA = hist.map((m) => m.role).lastIndexOf("assistant");
+    const messages = [...hist.map((m, i) => ({ role: m.role, content: trimBlocks(m.content, i === lastA) + verifiedNote(m) })), { role: "user", content: text }];
     try {
       const r = await fetch(s.workerUrl, {
         method: "POST",
@@ -2646,7 +3053,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
       if (stackNew !== null && !isNaN(stackNew)) state.settings.stackOz = stackNew;
       recordSilver(data.metals);
       const listChanges = [];
-      reply = reply.replace(/^\s*(TODO_ADD|TODO_DONE|TODO_UNDONE|TODO_DELETE|NOTE_DELETE|NOTE|DEBT_ADD|DEBT_PAY|DEBT_BALANCE|DEBT_TERMS|DEBT_PLAN|DEBT_DELETE|DEBT_DUE|BILL_ADD|BILL_PAID|BILL_DELETE|BILL_EDIT|FBANK_CONTRIB|FBANK_REQUEST|FBANK_APPROVE|FBANK_DECLINE|FBANK_FUND|FBANK_PAY|FBANK_AFR|DATE_ADD|DATE_EDIT|DATE_DELETE|DATE_LEAD|SILVER_WINDOW|SILVER_PREMIUM|SILVER_GOAL|STUDY_PLAN|STUDY_THEME|STUDY_READ|STUDY_SCORE|BOOK_ADD|BOOK_START|BOOK_PROGRESS|BOOK_DONE|BOOK_SKIP|BOOK_REMOVE|BOOK_CHECK|BOOK_REVIEWED|PLAYBOOK|TIMER_START|TIMER_STOP|TIMER_ADD):\s*(.*)$/gim, (m, cmd, arg) => {
+      reply = reply.replace(/^\s*(TODO_ADD|TODO_DONE|TODO_UNDONE|TODO_DELETE|NOTE_DELETE|NOTE|DEBT_ADD|DEBT_PAY|DEBT_BALANCE|DEBT_TERMS|DEBT_PLAN|DEBT_DELETE|DEBT_DUE|BILL_ADD|BILL_PAID|BILL_DELETE|BILL_EDIT|FBANK_CONTRIB|FBANK_REQUEST|FBANK_APPROVE|FBANK_DECLINE|FBANK_FUND|FBANK_PAY|FBANK_AFR|DATE_ADD|DATE_EDIT|DATE_DELETE|DATE_LEAD|SILVER_WINDOW|SILVER_PREMIUM|SILVER_GOAL|WRITE_BOOK_ADD|WRITE_FOCUS_OFF|WRITE_FOCUS|WRITE_SUMMARY|WRITE_STATUS|WRITE_CHAPTER_ADD|WRITE_STYLE|WRITE_NOTE|WRITE_STAGE|WRITE_CHECK|WRITE_DETAILS|STUDY_PLAN|STUDY_THEME|STUDY_READ|STUDY_SCORE|BOOK_ADD|BOOK_START|BOOK_PROGRESS|BOOK_DONE|BOOK_SKIP|BOOK_REMOVE|BOOK_CHECK|BOOK_REVIEWED|PLAYBOOK|TIMER_START|TIMER_STOP|TIMER_ADD):\s*(.*)$/gim, (m, cmd, arg) => {
         const C = cmd.toUpperCase();
         if (C.startsWith("TIMER_")) {
           let tm = null;
@@ -2656,7 +3063,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
           if (tm) listChanges.push(tm);
           return "";
         }
-        const msg = C.startsWith("SILVER_") ? applySilverCommand(C, arg.trim()) : C.startsWith("DATE_") ? applyDateCommand(C, arg.trim()) : C.startsWith("FBANK_") ? applyFbankCommand(C, arg.trim()) : (C === "DEBT_DUE" || C.startsWith("BILL_")) ? applyBillCommand(C, arg.trim()) : C.startsWith("DEBT_") ? applyDebtCommand(C, arg.trim()) : C.startsWith("STUDY_") ? applyStudyCommand(C, arg.trim())
+        const msg = C.startsWith("WRITE_") ? applyWriteCommand(C, arg.trim()) : C.startsWith("SILVER_") ? applySilverCommand(C, arg.trim()) : C.startsWith("DATE_") ? applyDateCommand(C, arg.trim()) : C.startsWith("FBANK_") ? applyFbankCommand(C, arg.trim()) : (C === "DEBT_DUE" || C.startsWith("BILL_")) ? applyBillCommand(C, arg.trim()) : C.startsWith("DEBT_") ? applyDebtCommand(C, arg.trim()) : C.startsWith("STUDY_") ? applyStudyCommand(C, arg.trim())
           : (C.startsWith("BOOK_") || C === "PLAYBOOK") ? applyBookCommand(C, arg.trim()) : applyListCommand(C, arg.trim());
         if (msg) listChanges.push(msg);
         return "";
@@ -2673,7 +3080,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
       memos.forEach((f) => { const p = document.createElement("p"); p.className = "msg memo"; p.textContent = "Saved to memory: " + f; logEl.append(p); });
       epMsgs.forEach((t) => listChanges.push(t));
       listChanges.forEach((t) => { const p = document.createElement("p"); p.className = "msg memo"; p.textContent = t; logEl.append(p); });
-      if (listChanges.length) { renderList(); renderDebts(); dueBadge(); try { renderFbank(); } catch (e) {} }
+      if (listChanges.length) { renderList(); renderDebts(); dueBadge(); try { renderFbank(); } catch (e) {} try { renderWriting(); renderWrBar(); } catch (e) {} }
       scrollDown();
       const spokenPart = splitBlocks(reply).spoken;
       speak(spokenPart || "It is on your screen.");
@@ -3197,6 +3604,13 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
   $("trExit").onclick = () => { state.tr.on = false; save(); renderTrBar(); note("Translator mode off."); };
   $("rTimerStop").onclick = () => { const r = stopTimer(false); if (r) note("Reading timer stopped: " + mins(r.mins) + " logged" + (r.bk ? " for " + r.bk.title : "") + "."); };
   $("rTimerAdd").onclick = () => { if (state.timer) { state.timer.end += 5 * 60000; state.timer.minutes += 5; save(); runTimer(); } };
+  const wrDlg = $("wrDlg");
+  $("wrBtn").onclick = () => { const f = writing().focus; wrBookId = f ? f.book : null; wrEdit = null; renderWriting(); wrDlg.showModal(); };
+  $("wrClose").onclick = () => wrDlg.close();
+  wrDlg.addEventListener("click", (e) => { if (e.target === wrDlg) wrDlg.close(); });
+  $("wrOpen").onclick = () => { const f = writing().focus; wrBookId = f ? f.book : null; wrEdit = f && f.ch ? f.ch : null; renderWriting(); wrDlg.showModal(); };
+  $("wrDone").onclick = () => { writing().focus = null; save(); renderWrBar(); note("Writing desk closed."); };
+  setTimeout(() => { try { renderWrBar(); msFlush(); } catch (e) {} }, 1200);
   const dtDlg = $("dtDlg");
   $("dtBtn").onclick = () => { dtEditing = null; renderDates(); dtDlg.showModal(); };
   $("dtClose").onclick = () => dtDlg.close();
