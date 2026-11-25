@@ -198,6 +198,12 @@
   .wrbar > div { height: 100%; background: var(--amber); }
   .wrcheck { display: flex; gap: 10px; align-items: flex-start; font-size: .92rem; line-height: 1.35; }
   .wrcheck input { margin-top: 3px; flex: none; width: 18px; height: 18px; }
+  .wrdoc { background: #fbf8f1; color: #1f1f1f; font: 1rem/1.6 Georgia, "Times New Roman", serif; padding: 22px 24px; border-radius: 10px; max-height: 62vh; overflow: auto; }
+  #wrBody .wrdoc h1, #wrBody .wrdoc h2 { font-family: Georgia, "Times New Roman", serif !important; letter-spacing: normal !important; text-transform: none !important; color: #1f1f1f !important; text-shadow: none !important; font-weight: bold; }
+  .wrdoc h1 { font-size: 1.5rem; margin: .2em 0; } .wrdoc h2 { font-size: 1.2rem; margin: 1.4em 0 .5em; }
+  .wrdoc p { margin: 0 0 .8em; }
+  .wrdoc ins { color: #1a7f37; background: rgba(26,127,55,.10); text-decoration: underline; }
+  .wrdoc del { color: #b42318; background: rgba(180,35,24,.08); text-decoration: line-through; }
   .outline .obody.draft { font: 1rem/1.55 Georgia, "Times New Roman", serif; white-space: pre-wrap; }
   .addrow input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
   .empty-note { color: var(--muted); font-size: .9rem; margin: 4px 0; }
@@ -1147,7 +1153,7 @@
     if (k === "books") return !v.list || !v.list.length;
     if (k === "study") return !v.days || !v.days.length;
     if (k === "dates") return !(v.items || []).length;
-    if (k === "writing") return !(v.books || []).some((b) => (b.chapters || []).length || Object.keys(b.check || {}).length || (b.notes || []).length || (b.style || []).length || (b.aiLog || []).length || b.audience || b.voice);
+    if (k === "writing") return !(v.books || []).some((b) => (b.chapters || []).length || Object.keys(b.check || {}).length || (b.notes || []).length || (b.style || []).length || (b.aiLog || []).length || (b.editLog || []).length || b.audience || b.voice);
     if (k === "fbank") return !(v.loans || []).length && !(v.ledger || []).length;
     return false;
   }
@@ -1643,7 +1649,9 @@
       }
     } catch (e) { /* try again later */ } finally { msFlushing = false; }
   }
-  async function saveChapterText(b, c, text) {
+  async function saveChapterText(b, c, text, log) {
+    if (!c.orig && text) { const pt = c.words ? await loadChapterText(b, c) : ""; if (pt && pt !== text) await ensureOriginal(b, c, pt); }
+    if (log) { b.editLog = b.editLog || []; b.editLog.push({ date: todayStr(), ch: c.id, label: c.title, kind: log.kind, words: wrWords(log.body || ""), note: String(log.note || "").slice(0, 400) }); if (b.editLog.length > 300) b.editLog = b.editLog.slice(-300); }
     const updated = Date.now();
     await msLocalPut(chKey(b, c), { text, updated });
     c.words = wrWords(text); c.updated = updated;
@@ -1699,7 +1707,7 @@
     }
     if (cmd === "WRITE_DETAILS") {
       const field = (p[1] || "").toLowerCase(), val = p.slice(2).join(" | ");
-      const map = { title: "title", subtitle: "subtitle", genre: "genre", audience: "audience", voice: "voice", basis: "basis" };
+      const map = { title: "title", subtitle: "subtitle", author: "author", genre: "genre", audience: "audience", voice: "voice", basis: "basis" };
       if (!map[field]) return null; b[map[field]] = val; return b.title + ": " + field + " updated";
     }
     return null;
@@ -1726,12 +1734,12 @@
     }
     return out.join("\n");
   }
-  function addDraftToChapter(blockRef, body, mode, kind) {
+  function addDraftToChapter(blockRef, body, mode, kind, noteText) {
     const hit = findChapter(blockRef); if (!hit) { note("I couldn't find that chapter. Open the Writing desk and paste it in."); return false; }
     (async () => {
       const cur = await loadChapterText(hit.b, hit.c);
       const text = mode === "replace" ? body : (cur ? cur.replace(/\s+$/, "") + "\n\n" : "") + body;
-      await saveChapterText(hit.b, hit.c, text);
+      await saveChapterText(hit.b, hit.c, text, { kind, body, note: noteText });
       if (kind === "draft") { hit.b.aiLog.push({ date: todayStr(), ch: hit.c.id, words: wrWords(body), label: hit.c.title }); hit.c.ai = true; }
       save(); renderWriting();
       note((mode === "replace" ? "Replaced the text of " : "Added to ") + hit.b.title + ", " + hit.c.title + (kind === "draft" ? ". Recorded as AI-drafted text for the KDP question." : "."));
@@ -1804,7 +1812,7 @@
     (async () => {
       const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
       let html = "<html><head><meta charset='utf-8'><title>" + esc(b.title) + "</title></head><body style='font-family:Georgia,serif;font-size:12pt;line-height:1.5'>";
-      html += "<h1 style='text-align:center'>" + esc(b.title) + "</h1>" + (b.subtitle ? "<h2 style='text-align:center;font-weight:normal'>" + esc(b.subtitle) + "</h2>" : "") + "<p style='text-align:center'>" + esc(state.settings.callsign || "Floyd E. Dorsey Jr.") + "</p>";
+      html += "<h1 style='text-align:center'>" + esc(b.title) + "</h1>" + (b.subtitle ? "<h2 style='text-align:center;font-weight:normal'>" + esc(b.subtitle) + "</h2>" : "") + "<p style='text-align:center'>" + esc(b.author || "Dr. Floyd E. Dorsey Jr.") + "</p>";
       for (const c of b.chapters) {
         const t = await loadChapterText(b, c);
         html += "<h2 style='page-break-before:always'>" + esc(c.title) + "</h2>" + t.split(/\n{2,}/).map((p) => p.trim() ? "<p>" + esc(p.trim()).replace(/\n/g, "<br>") + "</p>" : "").join("");
@@ -1814,7 +1822,7 @@
       a.download = b.title.replace(/[^\w\- ]+/g, "").trim().slice(0, 60) + ".doc"; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
     })();
   }
-  let wrBookId = null, wrEdit = null;
+  let wrBookId = null, wrEdit = null, wrView = null, wrMarked = true;
   function renderWriting() {
     const box = $("wrBody"); if (!box) return;
     const W = writing(); box.innerHTML = "";
@@ -1827,7 +1835,7 @@
       box.append(el("p", "empty-note", "Your books in progress. Tap a book to manage its chapters, publishing checklist, and editor's notes. To work with DOT, open a chapter and tap Work on this with DOT, or just ask her, such as \"Let's work on Contend, chapter 2.\""));
       W.books.forEach((bk) => {
         const words = bk.chapters.reduce((a, c) => a + (c.words || 0), 0), pr = checkProgress(bk);
-        const card = el("button", "wrbook"); card.onclick = () => { wrBookId = bk.id; wrEdit = null; renderWriting(); };
+        const card = el("button", "wrbook"); card.onclick = () => { wrBookId = bk.id; wrEdit = null; wrView = null; renderWriting(); };
         const t = el("strong", "", bk.title); const sub = el("small", "", (bk.subtitle ? bk.subtitle + " · " : "") + (bk.genre || ""));
         const meta = el("small", "", bk.stage + " · " + bk.chapters.length + " chapter" + (bk.chapters.length === 1 ? "" : "s") + " · " + fmtN(words) + " words · checklist " + pr.done + "/" + pr.total);
         const bar = el("div", "wrbar"); const fill = el("div"); fill.style.width = Math.round(100 * pr.done / pr.total) + "%"; bar.append(fill);
@@ -1835,6 +1843,22 @@
       });
       const nr = el("div", "addrow"); const ni = input("", "New book title"); nr.append(ni, btn("Add book", () => { if (!ni.value.trim()) return; W.books.push(newBook(ni.value.trim(), "", "", "")); save(); renderWriting(); }));
       box.append(nr); return;
+    }
+    // running edited manuscript
+    if (wrView === "doc") {
+      const top2 = el("div", "addrow");
+      const lab = el("label", "wrcheck"); const cb = el("input"); cb.type = "checkbox"; cb.checked = wrMarked; cb.onchange = () => { wrMarked = cb.checked; renderWriting(); }; lab.append(cb, el("span", "", "Show corrections"));
+      top2.append(btn("‹ Back", () => { wrView = null; renderWriting(); }), lab);
+      const dl = el("div", "addrow"); dl.append(btn("Download edited (Word)", () => downloadBookDoc(b, false)), btn("Download with corrections (Word)", () => downloadBookDoc(b, true)));
+      const stat = el("small", "", "Building the manuscript…"); stat.style.color = "var(--muted)";
+      const doc = el("div", "wrdoc");
+      box.append(top2, dl, stat, doc);
+      bookDocHtml(b, wrMarked, false).then((r) => {
+        doc.innerHTML = r.html || "<p><em>No chapters yet.</em></p>";
+        const words = b.chapters.reduce((a, c) => a + (c.words || 0), 0), edited = b.chapters.filter((c) => c.orig).length;
+        stat.textContent = fmtN(words) + " words · " + edited + " of " + b.chapters.length + " chapters changed since import" + (wrMarked && (r.totA || r.totD) ? " · " + fmtN(r.totA) + " words added, " + fmtN(r.totD) + " removed (green added, red removed)" : "");
+      });
+      return;
     }
     // chapter editor
     if (wrEdit) {
@@ -1845,13 +1869,13 @@
       loadChapterText(b, c).then((t) => { ta.value = t; ta.disabled = false; cnt.textContent = fmtN(wrWords(t)) + " words"; });
       const cnt = el("small", "", ""); ta.oninput = () => (cnt.textContent = fmtN(wrWords(ta.value)) + " words");
       const st = el("select"); WR_STATUS.forEach((x) => st.append(new Option(x, x))); st.value = c.status;
-      const row = el("div", "addrow"); row.append(btn("Save", async () => { c.title = tt.value.trim() || c.title; c.status = st.value; await saveChapterText(b, c, ta.value); note("Saved " + c.title + " (" + fmtN(c.words) + " words)."); }, true),
+      const row = el("div", "addrow"); row.append(btn("Save", async () => { c.title = tt.value.trim() || c.title; c.status = st.value; const before = await loadChapterText(b, c); await saveChapterText(b, c, ta.value, before !== ta.value && before ? { kind: "you", body: "", note: "" } : null); note("Saved " + c.title + " (" + fmtN(c.words) + " words)."); }, true),
         btn("Work on this with DOT", async () => { c.title = tt.value.trim() || c.title; c.status = st.value; if (!ta.disabled) await saveChapterText(b, c, ta.value); setFocus(b, c); $("wrDlg").close(); note("Writing desk open: " + b.title + ", " + c.title + ". Ask DOT to edit, critique, or continue it."); }),
         btn("Back", () => { wrEdit = null; renderWriting(); }));
       box.append(el("div", "bstage", "Chapter " + (b.chapters.indexOf(c) + 1) + (c.ai ? " · contains AI-drafted text" : "")), tt, st, ta, cnt, row);
       return;
     }
-    const top = el("div", "addrow"); top.append(btn("‹ All books", () => { wrBookId = null; renderWriting(); }), btn("Work on whole book with DOT", () => { setFocus(b, null); $("wrDlg").close(); note("Writing desk open: " + b.title + ". Ask for a critique, a plan, or publishing help."); }));
+    const top = el("div", "addrow"); top.append(btn("‹ All books", () => { wrBookId = null; renderWriting(); }), btn("📄 Edited manuscript", () => { wrView = "doc"; renderWriting(); }, true), btn("Work on whole book with DOT", () => { setFocus(b, null); $("wrDlg").close(); note("Writing desk open: " + b.title + ". Ask for a critique, a plan, or publishing help."); }));
     box.append(top);
     // chapters
     const words = b.chapters.reduce((a, c) => a + (c.words || 0), 0);
@@ -1888,7 +1912,7 @@
     im.append(imf, imm); box.append(im);
     // details
     const dd = el("details", "fbdet"); dd.append(el("summary", "", "Book details"));
-    const fields = [["title", "Title"], ["subtitle", "Subtitle"], ["genre", "Genre or category"], ["basis", "Source, such as \"Based on a sermon series\""], ["audience", "Who the book is for"], ["voice", "Your voice and style, for DOT's drafting"]];
+    const fields = [["title", "Title"], ["subtitle", "Subtitle"], ["author", "Author name as printed (Dr. Floyd E. Dorsey Jr.)"], ["genre", "Genre or category"], ["basis", "Source, such as \"Based on a sermon series\""], ["audience", "Who the book is for"], ["voice", "Your voice and style, for DOT's drafting"]];
     const ins = {}; fields.forEach(([k, ph]) => { const i = input(b[k], ph); ins[k] = i; dd.append(i); });
     const sg = el("select"); WR_STAGES.forEach((x) => sg.append(new Option(x, x))); sg.value = b.stage; dd.append(sg);
     dd.append(btn("Save details", () => { fields.forEach(([k]) => (b[k] = ins[k].value.trim())); if (!b.title) b.title = "Untitled"; b.stage = sg.value; b.fiction = /fiction|novel|sci/i.test(b.genre); save(); renderWriting(); note("Saved details for " + b.title + "."); }, true),
@@ -1912,7 +1936,96 @@
     const si = input("", "Add a style rule, such as \"Scripture in KJV unless noted\""); sd.append(si, btn("Add rule", () => { if (si.value.trim()) { b.style.push(si.value.trim()); save(); renderWriting(); } }));
     b.notes.slice().reverse().forEach((n) => sd.append(el("small", "", n.date + " · " + n.text)));
     box.append(sd);
-    const ex = el("div", "addrow"); ex.append(btn("Download manuscript (Word)", () => downloadBook(b))); box.append(ex);
+    const ex = el("div", "addrow"); ex.append(btn("Download edited (Word)", () => downloadBookDoc(b, false)), btn("Download with corrections (Word)", () => downloadBookDoc(b, true))); box.append(ex);
+  }
+
+  // ---------- running edited manuscript: originals, corrections, and a whole-book view ----------
+  const origKey = (b, c) => chKey(b, c) + "o";
+  async function ensureOriginal(b, c, currentText) {
+    if (c.orig || !String(currentText || "").trim()) return;
+    const v = { text: currentText, updated: Date.now() };
+    await msLocalPut(origKey(b, c), v); c.orig = true;
+    const q = msQueue(); if (!q.includes(origKey(b, c))) { q.push(origKey(b, c)); msQueueSet(q); }
+  }
+  async function loadOriginal(b, c) {
+    if (!c.orig) return null;
+    const k = origKey(b, c), loc = await msLocalGet(k); if (loc) return loc.text;
+    const s = state.settings;
+    if (s.workerUrl && s.syncOn) { try { const r = await syncPost({ action: "ms_get", ids: [k] }); const v = r.chapters && r.chapters[k]; if (v) { await msLocalPut(k, v); return v.text; } } catch (e) {} }
+    return null;
+  }
+  function tokenize(t) {
+    const out = []; String(t || "").replace(/\r/g, "").split(/\n\s*\n/).forEach((para, i) => { if (i) out.push("\n\n"); para.split(/\s+/).filter(Boolean).forEach((w) => out.push(w)); });
+    return out;
+  }
+  // Myers diff on words; returns null when the changes are too extensive to mark word by word
+  function diffWords(a, b, maxD) {
+    const n = a.length, m = b.length, max = Math.min(n + m, maxD || 2500), off = max + 1, v = new Int32Array(2 * max + 3), trace = [];
+    let found = -1;
+    for (let d = 0; d <= max; d++) {
+      trace.push(v.slice(off - d - 1, off + d + 2)); // values from the previous round for k in [-d-1, d+1]
+      for (let k = -d; k <= d; k += 2) {
+        let x = (k === -d || (k !== d && v[off + k - 1] < v[off + k + 1])) ? v[off + k + 1] : v[off + k - 1] + 1, y = x - k;
+        while (x < n && y < m && a[x] === b[y]) { x++; y++; }
+        v[off + k] = x;
+        if (x >= n && y >= m) { found = d; break; }
+      }
+      if (found >= 0) break;
+    }
+    if (found < 0) return null;
+    const ops = []; let x = n, y = m;
+    for (let d = found; d > 0; d--) {
+      const tv = trace[d], at = (kk) => tv[kk + d + 1], k = x - y;
+      const prevK = (k === -d || (k !== d && at(k - 1) < at(k + 1))) ? k + 1 : k - 1;
+      const px = at(prevK), py = px - prevK;
+      while (x > px && y > py) { ops.push(["=", a[x - 1]]); x--; y--; }
+      if (x === px) { ops.push(["+", b[y - 1]]); y--; } else { ops.push(["-", a[x - 1]]); x--; }
+    }
+    while (x > 0 && y > 0) { ops.push(["=", a[x - 1]]); x--; y--; }
+    return ops.reverse();
+  }
+  const escH = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  function textToHtml(t) { return String(t || "").split(/\n\s*\n/).map((p) => p.trim() ? "<p>" + escH(p.trim()).replace(/\n/g, "<br>") + "</p>" : "").join(""); }
+  function diffToHtml(orig, cur, forWord) {
+    const ops = diffWords(tokenize(orig), tokenize(cur));
+    if (!ops) return { html: textToHtml(cur), heavy: true, adds: 0, dels: 0 };
+    const insS = forWord ? " style='color:#1a7f37;text-decoration:underline'" : "", delS = forWord ? " style='color:#b42318;text-decoration:line-through'" : "";
+    let html = "<p>", run = null, buf = [], adds = 0, dels = 0;
+    const flush = () => { if (!buf.length) return; const t = escH(buf.join(" ")); html += run === "+" ? "<ins" + insS + ">" + t + "</ins> " : run === "-" ? "<del" + delS + ">" + t + "</del> " : t + " "; buf = []; };
+    ops.forEach(([op, w]) => {
+      if (w === "\n\n") { if (op === "-") { dels++; return; } flush(); run = null; html = html.replace(/\s+$/, "") + "</p><p>"; return; }
+      if (op === "+") adds++; if (op === "-") dels++;
+      if (op !== run) { flush(); run = op; } buf.push(w);
+    });
+    flush(); html = html.replace(/\s+$/, "") + "</p>";
+    return { html: html.replace(/<p><\/p>/g, ""), heavy: false, adds, dels };
+  }
+  async function bookDocHtml(b, marked, forWord) {
+    const author = b.author || "Dr. Floyd E. Dorsey Jr.";
+    let html = "<h1 style='text-align:center'>" + escH(b.title) + "</h1>" + (b.subtitle ? "<h2 style='text-align:center;font-weight:normal'>" + escH(b.subtitle) + "</h2>" : "") + "<p style='text-align:center'>" + escH(author) + "</p>";
+    let totA = 0, totD = 0;
+    for (const c of b.chapters) {
+      const cur = await loadChapterText(b, c);
+      html += "<h2 style='page-break-before:always'>" + escH(c.title) + "</h2>";
+      if (marked && c.orig) {
+        const o = await loadOriginal(b, c);
+        if (o !== null) { const r = diffToHtml(o, cur, forWord); totA += r.adds; totD += r.dels; html += (r.heavy ? "<p><em>This chapter was revised too heavily to mark word by word; the current text is shown.</em></p>" : "") + r.html; continue; }
+      }
+      html += textToHtml(cur);
+    }
+    const log = (b.editLog || []);
+    if (marked && log.length) {
+      html += "<h2 style='page-break-before:always'>Corrections log</h2>";
+      log.forEach((e) => { html += "<p><strong>" + escH(e.date + " · " + e.label + " · " + (e.kind === "draft" ? "DOT draft added" : e.kind === "edit" ? "DOT edit applied" : "Your changes")) + "</strong>" + (e.note ? "<br>" + escH(e.note) : "") + "</p>"; });
+    }
+    return { html, totA, totD };
+  }
+  async function downloadBookDoc(b, marked) {
+    const { html } = await bookDocHtml(b, marked, true);
+    const full = "<html><head><meta charset='utf-8'><title>" + escH(b.title) + "</title></head><body style='font-family:Georgia,serif;font-size:12pt;line-height:1.5'>" + html + "</body></html>";
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([full], { type: "application/msword" }));
+    a.download = b.title.replace(/[^\w\- ]+/g, "").trim().slice(0, 60) + (marked ? " - with corrections" : " - edited") + ".doc";
+    document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
   }
 
   // ---------- silver buying windows and premium ----------
@@ -2740,7 +2853,7 @@
     spoken = spoken.replace(/\n{3,}/g, "\n\n").trim();
     return { spoken, blocks };
   }
-  function outlineCard(b) {
+  function outlineCard(b, spokenNote) {
     const card = document.createElement("div"); card.className = "outline";
     const head = document.createElement("div"); head.className = "ohead";
     const h = document.createElement("strong"); h.textContent = b.title;
@@ -2752,17 +2865,17 @@
       const hit = b.ref && findChapter(b.ref);
       h.textContent = (b.kind === "draft" ? "✒️ Draft" : "✏️ Edited") + (hit ? " · " + hit.b.title + ", " + hit.c.title : "") + (b.title ? " · " + b.title : "") + " (" + fmtN(wrWords(b.body)) + " words)";
       keep.textContent = b.kind === "draft" ? "Add to chapter" : "Replace chapter text";
-      keep.onclick = () => { if (b.kind === "edit" && !confirm("Replace the chapter text with this edited version? A copy of the old text is not kept.")) return; if (addDraftToChapter(b.ref, b.body, b.kind === "draft" ? "append" : "replace", b.kind)) { keep.textContent = "Saved"; keep.disabled = true; } };
+      keep.onclick = () => { if (b.kind === "edit" && !confirm("Replace the chapter text with this edited version? A copy of the old text is not kept.")) return; if (addDraftToChapter(b.ref, b.body, b.kind === "draft" ? "append" : "replace", b.kind, spokenNote)) { keep.textContent = "Saved"; keep.disabled = true; } };
       if (!hit) {
         const fb = state.writing && state.writing.focus && findBook(state.writing.focus.book);
         if (b.kind === "draft" && fb) {
           keep.textContent = "Save as new chapter in " + fb.title;
-          keep.onclick = () => { const nm = prompt("Chapter title", b.title || "New chapter"); if (nm === null) return; const c = { id: state.nextId++, title: nm.trim() || "New chapter", words: 0, updated: 0, status: "Draft", summary: "" }; fb.chapters.push(c); save(); if (addDraftToChapter(String(c.id), b.body, "append", "draft")) { keep.textContent = "Saved"; keep.disabled = true; } };
+          keep.onclick = () => { const nm = prompt("Chapter title", b.title || "New chapter"); if (nm === null) return; const c = { id: state.nextId++, title: nm.trim() || "New chapter", words: 0, updated: 0, status: "Draft", summary: "" }; fb.chapters.push(c); save(); if (addDraftToChapter(String(c.id), b.body, "append", "draft", spokenNote)) { keep.textContent = "Saved"; keep.disabled = true; } };
         } else { keep.disabled = true; keep.title = "No chapter linked"; }
       }
       head.append(h, copy, keep);
       if (b.kind === "draft" && hit) { const rp = document.createElement("button"); rp.className = "btn"; rp.textContent = "Replace chapter text";
-        rp.onclick = () => { if (!confirm("Replace the whole chapter with this draft?")) return; if (addDraftToChapter(b.ref, b.body, "replace", "draft")) { rp.textContent = "Saved"; rp.disabled = true; keep.disabled = true; } }; head.append(rp); }
+        rp.onclick = () => { if (!confirm("Replace the whole chapter with this draft?")) return; if (addDraftToChapter(b.ref, b.body, "replace", "draft", spokenNote)) { rp.textContent = "Saved"; rp.disabled = true; keep.disabled = true; } }; head.append(rp); }
     } else head.append(h, copy, keep);
     const pre = document.createElement("div"); pre.className = "obody" + (b.kind === "draft" || b.kind === "edit" ? " draft" : ""); pre.textContent = b.body;
     card.append(head, pre);
@@ -2792,7 +2905,7 @@
       who.className = "who"; who.textContent = meta && meta.label ? meta.label : "DOT";
       const parts = splitBlocks(text);
       p.append(who, document.createTextNode(parts.spoken));
-      parts.blocks.forEach((b) => p.append(outlineCard(b)));
+      parts.blocks.forEach((b) => p.append(outlineCard(b, parts.spoken)));
       const se = sourcesEl(meta); if (se) p.append(se);
       if (parts.spoken.trim()) {
         const rb = document.createElement("button"); rb.className = "replay"; rb.textContent = "▶ Hear again";
@@ -2917,13 +3030,14 @@ ROLES
 - Author critique. Speak as a demanding acquisitions editor would: what works, what is weak, who the reader is, what similar books readers would compare it to, and whether it is ready. Be specific and candid, with the passage or chapter you mean, and end with the three changes that would help most. For nonfiction, judge clarity of purpose, structure, biblical accuracy, application, and reader takeaway. For fiction, judge premise, plot and pacing, characters and their arcs, point of view, dialogue, worldbuilding, and stakes.
 - Ghostwriter. Draft only when he asks. Write in his voice, learned from his chapters and his voice notes. Never invent quotations, statistics, stories about real people, or citations; leave a clearly marked placeholder such as [add illustration] or [verify source] instead. Quote Scripture only from get_scripture results, in the translation the book uses.
 - Publishing coach. Guide him through self-publishing step by step using his checklist above: front matter and copyright page, ISBN choices, cover, interior formatting, trim size, categories and keywords, description, pricing, the AI content question, proof copy, and launch. For any current rule, price, royalty rate, or platform requirement, check with web search first, report it from that result, and name the source; never state those from memory.
+RUNNING MANUSCRIPT: the app keeps each chapter's original text and builds one continuous edited manuscript of the whole book, with your corrections marked, under 📄 Edited manuscript on the book's page, downloadable as a Word file clean or with corrections. Every edit he applies updates it.
 AI DISCLOSURE: KDP asks authors whether a book contains AI-generated text. Text you draft is AI-generated even after he edits it; your edits and suggestions on his own writing are AI-assisted. That is why drafts and edits must go in the blocks below, so the app keeps an accurate record for him.
 BLOCKS (shown on screen with buttons, never read aloud):
 - New prose you wrote, such as a drafted section, scene, or chapter: [[DRAFT: chapter id | short label]] then the text, then [[/DRAFT]] on its own line. If no chapter exists for it yet, first add one with WRITE_CHAPTER_ADD, and use the same id the app reports only in later replies; until then, write [[DRAFT: none | label]].
 - His own text after line editing or proofreading, ready to replace the chapter: [[EDIT: chapter id | short label]] then the full edited text, then [[/EDIT]]. If your changes add substantial new passages, use DRAFT for those passages instead.
 - Critiques, plans, outlines, blurbs, author bios, and checklists go in an [[OUTLINE: title]] block.
 Write plain text inside blocks, with blank lines between paragraphs and no markdown. Outside the blocks, say in one to three spoken sentences what you did and suggest the next step. Edit or critique only text you can actually see in this conversation; if the chapter text is not included, ask him to open it on the writing desk or paste it.
-Record changes with one final line each, never read aloud: WRITE_FOCUS: book id or title | chapter number or title (opens a chapter so its text is included next time); WRITE_FOCUS_OFF; WRITE_CHAPTER_ADD: book id | chapter title; WRITE_SUMMARY: chapter id | two-sentence summary (add one whenever you have read a chapter that lacks a summary or has changed); WRITE_STATUS: chapter id | Draft, Edited, or Final; WRITE_STAGE: book id | Drafting, Revising, Editing, Proofreading, Ready to publish, or Published; WRITE_CHECK: book id | checklist item | done or undo (only when he says it is done); WRITE_STYLE: book id | style rule; WRITE_NOTE: book id | editor's note to remember; WRITE_DETAILS: book id | title, subtitle, genre, audience, voice, or basis | new value; WRITE_BOOK_ADD: title | subtitle | genre.`,
+Record changes with one final line each, never read aloud: WRITE_FOCUS: book id or title | chapter number or title (opens a chapter so its text is included next time); WRITE_FOCUS_OFF; WRITE_CHAPTER_ADD: book id | chapter title; WRITE_SUMMARY: chapter id | two-sentence summary (add one whenever you have read a chapter that lacks a summary or has changed); WRITE_STATUS: chapter id | Draft, Edited, or Final; WRITE_STAGE: book id | Drafting, Revising, Editing, Proofreading, Ready to publish, or Published; WRITE_CHECK: book id | checklist item | done or undo (only when he says it is done); WRITE_STYLE: book id | style rule; WRITE_NOTE: book id | editor's note to remember; WRITE_DETAILS: book id | title, subtitle, author, genre, audience, voice, or basis | new value; WRITE_BOOK_ADD: title | subtitle | genre.`,
 
       `BIRTHDAYS AND ANNIVERSARIES
 ${name} keeps birthdays and anniversaries for his family and church members. The app calculates every date, day count, age, and number of years:
