@@ -1668,6 +1668,12 @@
     return loc ? loc.text : "";
   }
   let focusCache = { key: "", text: "" };
+  const DOC_CAP = 300000;
+  function writingDoc() {
+    const W = state.writing, f = W && W.focus, fb = f && findBook(f.book), hit = fb && f.ch && findChapter(f.ch, fb);
+    if (!hit || focusCache.key !== chKey(hit.b, hit.c) || !focusCache.text) return "";
+    return "WRITING DESK MANUSCRIPT. This is the complete text of the chapter " + "he is working on: " + fb.title + ", chapter " + (fb.chapters.indexOf(hit.c) + 1) + ", \"" + hit.c.title + "\" (#" + hit.c.id + "). Your other instructions follow after it.\n<<<CHAPTER TEXT\n" + focusCache.text.slice(0, DOC_CAP) + "\nCHAPTER TEXT>>>";
+  }
   async function prepWriting() {
     const W = writing(), f = W.focus; if (!f) { focusCache = { key: "", text: "" }; return; }
     const hit = findChapter(f.ch); if (!hit) { W.focus = null; renderWrBar(); return; }
@@ -1727,9 +1733,9 @@
       const ai = aiSummary(fb); out.push("AI-drafted text recorded for this book: " + (ai.any ? fmtN(ai.words) + " words across " + ai.chs + " chapter" + (ai.chs === 1 ? "" : "s") : "none"));
       const hit = f.ch && findChapter(f.ch, fb);
       if (hit && focusCache.key === chKey(hit.b, hit.c)) {
-        const t = focusCache.text || "", cap = 60000;
+        const t = focusCache.text || "";
         out.push("ACTIVE CHAPTER: #" + hit.c.id + " Chapter " + (fb.chapters.indexOf(hit.c) + 1) + ", \"" + hit.c.title + "\", " + hit.c.status + ", " + fmtN(wrWords(t)) + " words." +
-          (t ? (t.length > cap ? " Only the first part fits; tell him the rest was not included." : "") + "\n<<<CHAPTER TEXT\n" + t.slice(0, cap) + "\nCHAPTER TEXT>>>" : " The chapter has no text yet."));
+          (t ? (t.length > DOC_CAP ? " It is very long; only the first " + fmtN(wrWords(t.slice(0, DOC_CAP))) + " words are included. Tell him, and suggest using Split into sections on the writing desk." : " The complete text is included at the very start of your instructions, between the CHAPTER TEXT markers. You can see all of it.") : " The chapter has no text yet."));
       }
     }
     return out.join("\n");
@@ -1738,6 +1744,7 @@
     const hit = findChapter(blockRef); if (!hit) { note("I couldn't find that chapter. Open the Writing desk and paste it in."); return false; }
     (async () => {
       const cur = await loadChapterText(hit.b, hit.c);
+      if (mode === "replace" && wrWords(cur) > 300 && wrWords(body) < wrWords(cur) * 0.6 && !confirm("This text has " + fmtN(wrWords(body)) + " words, but the chapter has " + fmtN(wrWords(cur)) + ". Replacing would drop the rest of the chapter. Replace anyway?")) { note("Nothing was replaced."); return; }
       const text = mode === "replace" ? body : (cur ? cur.replace(/\s+$/, "") + "\n\n" : "") + body;
       await saveChapterText(hit.b, hit.c, text, { kind, body, note: noteText });
       if (kind === "draft") { hit.b.aiLog.push({ date: todayStr(), ch: hit.c.id, words: wrWords(body), label: hit.c.title }); hit.c.ai = true; }
@@ -1776,8 +1783,8 @@
       L.forEach((l, k) => {
         if (!k) { out = l.t; return; }
         const gap = l.y !== null && L[k - 1].y !== null ? Math.abs(L[k - 1].y - l.y) : 0;
-        const isHead = (/^(chapter|part|day|lesson|session)\s+\S+/i.test(l.t) && l.t.length < 120) || /^(introduction|preface|foreword|prologue|epilogue|conclusion|afterword|acknowledgments|acknowledgements)$/i.test(l.t);
-        const prevHead = /^(introduction|preface|foreword|prologue|epilogue|conclusion|afterword|acknowledgments|acknowledgements)$/i.test(L[k - 1].t) || (/^(chapter|part|day|lesson|session)\s+\S+/i.test(L[k - 1].t) && L[k - 1].t.length < 120);
+        const isHead = isRefHead(l.t) || (/^(chapter|part|day|lesson|session)\s+\S+/i.test(l.t) && l.t.length < 120) || /^(introduction|preface|foreword|prologue|epilogue|conclusion|afterword|acknowledgments|acknowledgements)$/i.test(l.t);
+        const prevHead = isRefHead(L[k - 1].t) || /^(introduction|preface|foreword|prologue|epilogue|conclusion|afterword|acknowledgments|acknowledgements)$/i.test(L[k - 1].t) || (/^(chapter|part|day|lesson|session)\s+\S+/i.test(L[k - 1].t) && L[k - 1].t.length < 120);
         if (isHead || prevHead || (norm && gap > norm * 1.45)) out += "\n\n" + l.t;
         else if (/-$/.test(out) && /^[a-z]/.test(l.t)) out = out.slice(0, -1) + l.t;
         else out += " " + l.t;
@@ -1802,9 +1809,26 @@
     if (/\.pages$/i.test(file.name)) throw new Error("Pages files can't be read directly. In Pages, use Export To → Word, then add the .docx here.");
     throw new Error("Use a Word (.docx), PDF, or text file.");
   }
+  // a short line that is only a Bible reference or a verse label, such as "Jude 1:3", "Jude 3-4", "Verse 5", or "Verses 5-7: The Warning"
+  function isRefHead(l) {
+    const t = String(l || "").trim(); if (!t || t.length > 80 || /[.;,]$/.test(t)) return false;
+    return /^(verses?|vv?\.)\s*\d+(\s*[-–:]\s*\d+)?\b/i.test(t) || /^(?:[1-3]\s?)?[A-Z][a-z]+\.?\s+\d+(?::\d+)?(?:\s*[-–]\s*\d+(?::\d+)?)?(?:\s*[:—–-]\s*\S.*)?$/.test(t) && /\d/.test(t.split(/\s+/)[1] || "");
+  }
+  function suggestMarker(text) {
+    const counts = {};
+    String(text).split(/\n\s*\n|\n/).forEach((p) => { const t = p.trim(); if (!t || t.length > 80 || t.split(/\s+/).length > 12 || /[.;,]$/.test(t)) return; const w = t.split(/\s+/)[0].replace(/[^\w'’-]/g, ""); if (w.length > 1) counts[w] = (counts[w] || 0) + 1; });
+    const best = Object.entries(counts).filter(([, n]) => n >= 3).sort((a, b) => b[1] - a[1])[0];
+    return best ? best[0] : "";
+  }
+  function splitAtMarker(text, marker) {
+    const m = marker.trim().toLowerCase(), lines = String(text).split("\n"), out = []; let cur = { title: "Opening", text: [] };
+    lines.forEach((l) => { const t = l.trim(); if (t && t.length <= 120 && t.toLowerCase().startsWith(m) && !/[.;,]$/.test(t)) { if (cur.text.join("").trim() || out.length) out.push(cur); cur = { title: t, text: [] }; } else cur.text.push(l); });
+    out.push(cur);
+    return out.map((c) => ({ title: c.title.slice(0, 120), text: c.text.join("\n").replace(/^\s+|\s+$/g, "") })).filter((c, i) => c.text || i > 0);
+  }
   function splitManuscript(text) {
     const lines = String(text).split("\n"), out = []; let cur = null;
-    const isHead = (l) => /^##\s+\S/.test(l) || /^\s*(chapter|part|day|lesson|session)\s+([0-9ivxlc]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/i.test(l) || /^\s*(introduction|preface|foreword|prologue|epilogue|conclusion|afterword|acknowledgments|acknowledgements)\s*$/i.test(l);
+    const isHead = (l) => /^##\s+\S/.test(l) || isRefHead(l) || /^\s*(chapter|part|day|lesson|session)\s+([0-9ivxlc]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/i.test(l) || /^\s*(introduction|preface|foreword|prologue|epilogue|conclusion|afterword|acknowledgments|acknowledgements)\s*$/i.test(l);
     lines.forEach((l) => { if (isHead(l) && l.trim().length < 140) { cur = { title: l.replace(/^##\s+/, "").trim(), text: [] }; out.push(cur); } else { if (!cur) { cur = { title: "Opening", text: [] }; out.push(cur); } cur.text.push(l); } });
     return out.map((c) => ({ title: c.title, text: c.text.join("\n").replace(/^\s+|\s+$/g, "") })).filter((c) => c.text || out.length === 1);
   }
@@ -1871,6 +1895,23 @@
       const st = el("select"); WR_STATUS.forEach((x) => st.append(new Option(x, x))); st.value = c.status;
       const row = el("div", "addrow"); row.append(btn("Save", async () => { c.title = tt.value.trim() || c.title; c.status = st.value; const before = await loadChapterText(b, c); await saveChapterText(b, c, ta.value, before !== ta.value && before ? { kind: "you", body: "", note: "" } : null); note("Saved " + c.title + " (" + fmtN(c.words) + " words)."); }, true),
         btn("Work on this with DOT", async () => { c.title = tt.value.trim() || c.title; c.status = st.value; if (!ta.disabled) await saveChapterText(b, c, ta.value); setFocus(b, c); $("wrDlg").close(); note("Writing desk open: " + b.title + ", " + c.title + ". Ask DOT to edit, critique, or continue it."); }),
+        btn("Split into sections", async () => {
+          const text = ta.disabled ? await loadChapterText(b, c) : ta.value;
+          const mk = prompt("Split this chapter wherever a heading line starts with these words (for example Jude, Verse, or Chapter):", suggestMarker(text) || "Jude");
+          if (mk === null || !mk.trim()) return;
+          const parts = splitAtMarker(text, mk);
+          if (parts.length < 2) { note("No heading lines start with \"" + mk.trim() + "\". Try another word."); return; }
+          if (!confirm("Split \"" + c.title + "\" into " + parts.length + " sections?\n\n" + parts.slice(0, 8).map((x) => "• " + x.title).join("\n") + (parts.length > 8 ? "\n…and " + (parts.length - 8) + " more" : ""))) return;
+          const at = b.chapters.indexOf(c), news = [];
+          for (let i = 0; i < parts.length; i++) {
+            const pc = i === 0 ? c : { id: state.nextId++, title: parts[i].title, words: 0, updated: 0, status: c.status, summary: "" };
+            if (i === 0) { pc.title = parts[0].title === "Opening" ? c.title : parts[0].title; pc.summary = ""; pc.orig = false; }
+            else news.push(pc);
+            await saveChapterText(b, pc, parts[i].text);
+          }
+          b.chapters.splice(at + 1, 0, ...news); save(); wrEdit = null; renderWriting();
+          note("Split into " + parts.length + " sections. Open any section and tap Work on this with DOT; she can see each one in full.");
+        }),
         btn("Back", () => { wrEdit = null; renderWriting(); }));
       box.append(el("div", "bstage", "Chapter " + (b.chapters.indexOf(c) + 1) + (c.ai ? " · contains AI-drafted text" : "")), tt, st, ta, cnt, row);
       return;
@@ -3036,7 +3077,7 @@ BLOCKS (shown on screen with buttons, never read aloud):
 - New prose you wrote, such as a drafted section, scene, or chapter: [[DRAFT: chapter id | short label]] then the text, then [[/DRAFT]] on its own line. If no chapter exists for it yet, first add one with WRITE_CHAPTER_ADD, and use the same id the app reports only in later replies; until then, write [[DRAFT: none | label]].
 - His own text after line editing or proofreading, ready to replace the chapter: [[EDIT: chapter id | short label]] then the full edited text, then [[/EDIT]]. If your changes add substantial new passages, use DRAFT for those passages instead.
 - Critiques, plans, outlines, blurbs, author bios, and checklists go in an [[OUTLINE: title]] block.
-Write plain text inside blocks, with blank lines between paragraphs and no markdown. Outside the blocks, say in one to three spoken sentences what you did and suggest the next step. Edit or critique only text you can actually see in this conversation; if the chapter text is not included, ask him to open it on the writing desk or paste it.
+Write plain text inside blocks, with blank lines between paragraphs and no markdown. Outside the blocks, say in one to three spoken sentences what you did and suggest the next step. An EDIT block replaces the whole chapter, so it must always contain the complete chapter text. One reply holds about 5,000 words; if a chapter is longer than that, do not send an EDIT block. Give your critique or a list of corrections instead, and suggest he tap Split into sections on the writing desk so you can edit each section in full. When reviewing a long chapter, work in order and keep track of where you stopped so he can say "continue." Edit or critique only text you can actually see in this conversation; if the chapter text is not included, ask him to open it on the writing desk or paste it.
 Record changes with one final line each, never read aloud: WRITE_FOCUS: book id or title | chapter number or title (opens a chapter so its text is included next time); WRITE_FOCUS_OFF; WRITE_CHAPTER_ADD: book id | chapter title; WRITE_SUMMARY: chapter id | two-sentence summary (add one whenever you have read a chapter that lacks a summary or has changed); WRITE_STATUS: chapter id | Draft, Edited, or Final; WRITE_STAGE: book id | Drafting, Revising, Editing, Proofreading, Ready to publish, or Published; WRITE_CHECK: book id | checklist item | done or undo (only when he says it is done); WRITE_STYLE: book id | style rule; WRITE_NOTE: book id | editor's note to remember; WRITE_DETAILS: book id | title, subtitle, author, genre, audience, voice, or basis | new value; WRITE_BOOK_ADD: title | subtitle | genre.`,
 
       `BIRTHDAYS AND ANNIVERSARIES
@@ -3183,7 +3224,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
       const r = await fetch(s.workerUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Access-Code": s.accessCode || "" },
-        body: JSON.stringify({ system: systemPrompt(), messages, attachments: atts, prior_silver: priorSilver(),
+        body: JSON.stringify({ system: systemPrompt(), system_doc: writingDoc(), messages, attachments: atts, prior_silver: priorSilver(),
           stack: { holdings: s.stackOz, goal: s.stackGoal, window: s.buyWindow, premium: s.premium, window_status: windowStatus(s.buyWindow) },
           watchlist: String(s.watchlist || "").split(/[,\s]+/).filter(Boolean), shares: s.shares || {} })
       });
