@@ -204,6 +204,11 @@
   .wrdoc p { margin: 0 0 .8em; }
   .wrdoc ins { color: #1a7f37; background: rgba(26,127,55,.10); text-decoration: underline; }
   .wrdoc del { color: #b42318; background: rgba(180,35,24,.08); text-decoration: line-through; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .edwarn { margin: 8px 12px 4px; padding: 10px 12px; border-radius: 8px; background: rgba(240,80,60,.12); border: 1px solid rgba(240,80,60,.4); color: #ffb4a8; font-size: .9rem; line-height: 1.4; }
+  .edstat { display: block; margin: 8px 14px 0; color: var(--muted); font-size: .85rem; }
+  .edstat.bad { color: #ffb4a8; }
+  .outline .obody.edview { margin: 10px 12px 12px; max-height: 50vh; }
   .outline .obody.draft { font: 1rem/1.55 Georgia, "Times New Roman", serif; white-space: pre-wrap; }
   .addrow input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
   .empty-note { color: var(--muted); font-size: .9rem; margin: 4px 0; }
@@ -453,6 +458,7 @@
       <span id="wrLabel"></span>
       <span style="display:flex;gap:8px">
         <button class="btn" id="wrOpen">Open</button>
+        <button class="btn" id="wrNext">Next ›</button>
         <button class="btn" id="wrDone">Close desk</button>
       </span>
     </div>
@@ -610,6 +616,7 @@
       <h2 style="font-size:1.05rem;margin-top:6px">Sync across devices</h2>
       <label class="check"><input id="sSync" type="checkbox"> Keep this device in sync with my other devices</label>
       <small id="syncStatus" style="color:var(--muted)">Off on this device.</small>
+      <small style="color:var(--muted);display:block;margin-top:6px">DOT app version 43</small>
       <button class="btn" id="syncNowBtn" style="justify-self:start">Sync now</button>
       <div class="field">
         <label for="bkSel">Restore from a backup</label>
@@ -1679,6 +1686,12 @@
     const hit = findChapter(f.ch); if (!hit) { W.focus = null; renderWrBar(); return; }
     focusCache = { key: chKey(hit.b, hit.c), text: await loadChapterText(hit.b, hit.c) };
   }
+  function focusNext() {
+    const f = state.writing && state.writing.focus, b = f && findBook(f.book); if (!b) return;
+    const i = b.chapters.findIndex((c) => c.id === f.ch), nx = b.chapters[i + 1];
+    if (!nx) { note("That was the last section of " + b.title + "."); return; }
+    setFocus(b, nx); note("Writing desk open: " + b.title + ", " + nx.title + ". DOT can see this section in full. Ask her to edit it.");
+  }
   function setFocus(b, c) { writing().focus = c ? { book: b.id, ch: c.id } : { book: b.id, ch: null }; save(); renderWrBar(); }
   function renderWrBar() {
     const bar = $("wrBar"); if (!bar) return;
@@ -1895,6 +1908,11 @@
       const st = el("select"); WR_STATUS.forEach((x) => st.append(new Option(x, x))); st.value = c.status;
       const row = el("div", "addrow"); row.append(btn("Save", async () => { c.title = tt.value.trim() || c.title; c.status = st.value; const before = await loadChapterText(b, c); await saveChapterText(b, c, ta.value, before !== ta.value && before ? { kind: "you", body: "", note: "" } : null); note("Saved " + c.title + " (" + fmtN(c.words) + " words)."); }, true),
         btn("Work on this with DOT", async () => { c.title = tt.value.trim() || c.title; c.status = st.value; if (!ta.disabled) await saveChapterText(b, c, ta.value); setFocus(b, c); $("wrDlg").close(); note("Writing desk open: " + b.title + ", " + c.title + ". Ask DOT to edit, critique, or continue it."); }),
+        ...(c.orig ? [btn("Restore original", async () => {
+          const o = await loadOriginal(b, c); if (o === null) { note("The original text isn't available on this device yet."); return; }
+          if (!confirm("Put back the original text of " + c.title + " (" + fmtN(wrWords(o)) + " words), as it was before any edits? The current version is replaced.")) return;
+          await saveChapterText(b, c, o, { kind: "you", body: "", note: "Restored the original text" }); wrEdit = c.id; renderWriting(); note("Restored the original text of " + c.title + ".");
+        })] : []),
         btn("Split into sections", async () => {
           const text = ta.disabled ? await loadChapterText(b, c) : ta.value;
           const mk = prompt("Split this chapter wherever a heading line starts with these words (for example Jude, Verse, or Chapter):", suggestMarker(text) || "Jude");
@@ -2894,7 +2912,7 @@
     spoken = spoken.replace(/\n{3,}/g, "\n\n").trim();
     return { spoken, blocks };
   }
-  function outlineCard(b, spokenNote) {
+  function outlineCard(b, spokenNote, meta) {
     const card = document.createElement("div"); card.className = "outline";
     const head = document.createElement("div"); head.className = "ohead";
     const h = document.createElement("strong"); h.textContent = b.title;
@@ -2904,22 +2922,51 @@
     keep.onclick = () => { applyListCommand("NOTE", b.title + "\n" + b.body); save(); renderList(); keep.textContent = "Saved"; keep.disabled = true; };
     if (b.kind === "draft" || b.kind === "edit") {
       const hit = b.ref && findChapter(b.ref);
-      h.textContent = (b.kind === "draft" ? "✒️ Draft" : "✏️ Edited") + (hit ? " · " + hit.b.title + ", " + hit.c.title : "") + (b.title ? " · " + b.title : "") + " (" + fmtN(wrWords(b.body)) + " words)";
-      keep.textContent = b.kind === "draft" ? "Add to chapter" : "Replace chapter text";
-      keep.onclick = () => { if (b.kind === "edit" && !confirm("Replace the chapter text with this edited version? A copy of the old text is not kept.")) return; if (addDraftToChapter(b.ref, b.body, b.kind === "draft" ? "append" : "replace", b.kind, spokenNote)) { keep.textContent = "Saved"; keep.disabled = true; } };
-      if (!hit) {
-        const fb = state.writing && state.writing.focus && findBook(state.writing.focus.book);
-        if (b.kind === "draft" && fb) {
-          keep.textContent = "Save as new chapter in " + fb.title;
-          keep.onclick = () => { const nm = prompt("Chapter title", b.title || "New chapter"); if (nm === null) return; const c = { id: state.nextId++, title: nm.trim() || "New chapter", words: 0, updated: 0, status: "Draft", summary: "" }; fb.chapters.push(c); save(); if (addDraftToChapter(String(c.id), b.body, "append", "draft", spokenNote)) { keep.textContent = "Saved"; keep.disabled = true; } };
-        } else { keep.disabled = true; keep.title = "No chapter linked"; }
+      const sawIt = !!(meta && meta.docCh && hit && String(meta.docCh) === String(hit.c.id));
+      h.textContent = (b.kind === "draft" ? "✒️ Draft" : "✏️ Edits") + (hit ? " · " + hit.b.title + ", " + hit.c.title : "") + (b.title ? " · " + b.title : "") + " (" + fmtN(wrWords(b.body)) + " words)";
+      const warn = (msg) => { const w = document.createElement("div"); w.className = "edwarn"; w.textContent = msg; return w; };
+      const nextBtn = () => { const nb = document.createElement("button"); nb.className = "btn"; nb.textContent = "Next section ›"; nb.onclick = () => focusNext(); return nb; };
+      if (b.kind === "edit") {
+        keep.textContent = "Accept changes"; keep.disabled = true;
+        head.append(h, copy, keep);
+        if (!hit) { card.append(head, warn("Not linked to a chapter, so it can't be applied.")); }
+        else if (!sawIt) { card.append(head, warn("Can't apply: DOT did not have this chapter's text when she wrote this, so it may not match your words. Open the chapter on the writing desk, tap Work on this with DOT, and ask again.")); }
+        else {
+          const status = document.createElement("small"); status.className = "edstat"; status.textContent = "Comparing with your chapter…";
+          card.append(head, status);
+          loadChapterText(hit.b, hit.c).then((cur) => {
+            const r = diffToHtml(cur, b.body, false), ops = r.heavy ? null : (r.adds + r.dels);
+            const same = wrWords(cur) ? 1 - (r.dels / Math.max(1, wrWords(cur))) : 0;
+            if (!cur.trim()) { status.textContent = "This chapter is empty on the desk, so there is nothing to edit."; return; }
+            if (r.heavy || same < 0.5) { status.textContent = "Can't apply: this doesn't match your chapter's current text closely enough to be an edit of it. Ask DOT to edit the open chapter again."; status.className = "edstat bad"; pre.textContent = b.body; return; }
+            if (wrWords(b.body) < wrWords(cur) * 0.6) { status.textContent = "Can't apply: this covers only part of the chapter (" + fmtN(wrWords(b.body)) + " of " + fmtN(wrWords(cur)) + " words). Split the chapter into sections, then edit each one in full."; status.className = "edstat bad"; pre.textContent = b.body; return; }
+            status.textContent = ops ? fmtN(r.adds) + " words added, " + fmtN(r.dels) + " removed. Green is added, red is removed. Review, then tap Accept changes." : "No changes from your current text.";
+            pre.innerHTML = r.html; pre.classList.add("wrdoc", "edview");
+            keep.disabled = !ops;
+            keep.onclick = () => { if (addDraftToChapter(String(hit.c.id), b.body, "replace", "edit", spokenNote)) { keep.textContent = "Accepted"; keep.disabled = true; status.textContent = "Accepted and saved to " + hit.c.title + ". The edited manuscript is updated."; head.append(nextBtn()); } };
+          });
+        }
+      } else {
+        keep.textContent = "Add to chapter";
+        const canDraft = hit && (sawIt || !hit.c.words);
+        head.append(h, copy, keep);
+        if (hit && canDraft) {
+          keep.onclick = () => { if (addDraftToChapter(String(hit.c.id), b.body, "append", "draft", spokenNote)) { keep.textContent = "Added"; keep.disabled = true; } };
+          card.append(head);
+        } else if (hit) { keep.disabled = true; card.append(head, warn("Can't add: DOT did not have this chapter open when she wrote this. Open it on the writing desk and ask again.")); }
+        else {
+          const fb = state.writing && state.writing.focus && findBook(state.writing.focus.book);
+          if (fb) {
+            keep.textContent = "Save as new chapter in " + fb.title;
+            keep.onclick = () => { const nm = prompt("Chapter title", b.title || "New chapter"); if (nm === null) return; const c = { id: state.nextId++, title: nm.trim() || "New chapter", words: 0, updated: 0, status: "Draft", summary: "" }; fb.chapters.push(c); save(); if (addDraftToChapter(String(c.id), b.body, "append", "draft", spokenNote)) { keep.textContent = "Saved"; keep.disabled = true; } };
+          } else keep.disabled = true;
+          card.append(head);
+        }
       }
-      head.append(h, copy, keep);
-      if (b.kind === "draft" && hit) { const rp = document.createElement("button"); rp.className = "btn"; rp.textContent = "Replace chapter text";
-        rp.onclick = () => { if (!confirm("Replace the whole chapter with this draft?")) return; if (addDraftToChapter(b.ref, b.body, "replace", "draft", spokenNote)) { rp.textContent = "Saved"; rp.disabled = true; keep.disabled = true; } }; head.append(rp); }
     } else head.append(h, copy, keep);
     const pre = document.createElement("div"); pre.className = "obody" + (b.kind === "draft" || b.kind === "edit" ? " draft" : ""); pre.textContent = b.body;
-    card.append(head, pre);
+    if (!card.contains(head)) card.append(head);
+    card.append(pre);
     return card;
   }
   function sourcesEl(meta) {
@@ -2946,7 +2993,7 @@
       who.className = "who"; who.textContent = meta && meta.label ? meta.label : "DOT";
       const parts = splitBlocks(text);
       p.append(who, document.createTextNode(parts.spoken));
-      parts.blocks.forEach((b) => p.append(outlineCard(b, parts.spoken)));
+      parts.blocks.forEach((b) => p.append(outlineCard(b, parts.spoken, meta)));
       const se = sourcesEl(meta); if (se) p.append(se);
       if (parts.spoken.trim()) {
         const rb = document.createElement("button"); rb.className = "replay"; rb.textContent = "▶ Hear again";
@@ -3077,7 +3124,8 @@ BLOCKS (shown on screen with buttons, never read aloud):
 - New prose you wrote, such as a drafted section, scene, or chapter: [[DRAFT: chapter id | short label]] then the text, then [[/DRAFT]] on its own line. If no chapter exists for it yet, first add one with WRITE_CHAPTER_ADD, and use the same id the app reports only in later replies; until then, write [[DRAFT: none | label]].
 - His own text after line editing or proofreading, ready to replace the chapter: [[EDIT: chapter id | short label]] then the full edited text, then [[/EDIT]]. If your changes add substantial new passages, use DRAFT for those passages instead.
 - Critiques, plans, outlines, blurbs, author bios, and checklists go in an [[OUTLINE: title]] block.
-Write plain text inside blocks, with blank lines between paragraphs and no markdown. Outside the blocks, say in one to three spoken sentences what you did and suggest the next step. An EDIT block replaces the whole chapter, so it must always contain the complete chapter text. One reply holds about 5,000 words; if a chapter is longer than that, do not send an EDIT block. Give your critique or a list of corrections instead, and suggest he tap Split into sections on the writing desk so you can edit each section in full. When reviewing a long chapter, work in order and keep track of where you stopped so he can say "continue." Edit or critique only text you can actually see in this conversation; if the chapter text is not included, ask him to open it on the writing desk or paste it.
+Write plain text inside blocks, with blank lines between paragraphs and no markdown. Outside the blocks, say in one to three spoken sentences what you did and suggest the next step. An EDIT block replaces the whole chapter, so it must always contain the complete chapter text. One reply holds about 5,000 words; if a chapter is longer than that, do not send an EDIT block. Give your critique or a list of corrections instead, and suggest he tap Split into sections on the writing desk so you can edit each section in full. When reviewing a long chapter, work in order and keep track of where you stopped so he can say "continue." HOW EDITS WORK, follow exactly: You can edit only the ACTIVE CHAPTER, whose full text is at the start of your instructions; use its exact id in the EDIT block. For any other chapter you have no text, so never write an EDIT or DRAFT block for it, and never rebuild a chapter from memory, summaries, or earlier replies. If he asks about a different chapter, add WRITE_FOCUS for it and ask him to send the request again so you receive its text. You never apply, save, or change his text yourself; nothing changes until he taps Accept changes or Add to chapter. So never say you made, applied, or saved a change; say "Here are my edits for [chapter]. Review them and tap Accept changes." The app checks each EDIT block against his text and refuses one that does not match. An EDIT block keeps every sentence of his chapter in order, changing only what needs correcting.
+Edit or critique only text you can actually see in this conversation; if the chapter text is not included, ask him to open it on the writing desk or paste it.
 Record changes with one final line each, never read aloud: WRITE_FOCUS: book id or title | chapter number or title (opens a chapter so its text is included next time); WRITE_FOCUS_OFF; WRITE_CHAPTER_ADD: book id | chapter title; WRITE_SUMMARY: chapter id | two-sentence summary (add one whenever you have read a chapter that lacks a summary or has changed); WRITE_STATUS: chapter id | Draft, Edited, or Final; WRITE_STAGE: book id | Drafting, Revising, Editing, Proofreading, Ready to publish, or Published; WRITE_CHECK: book id | checklist item | done or undo (only when he says it is done); WRITE_STYLE: book id | style rule; WRITE_NOTE: book id | editor's note to remember; WRITE_DETAILS: book id | title, subtitle, author, genre, audience, voice, or basis | new value; WRITE_BOOK_ADD: title | subtitle | genre.`,
 
       `BIRTHDAYS AND ANNIVERSARIES
@@ -3211,6 +3259,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
     logEl.append(msgEl("user", text)); scrollDown();
     setMode("thinking");
     try { await prepWriting(); } catch (e) {}
+    let docSent = "", docCh = (() => { const f = state.writing && state.writing.focus; return f && f.ch ? f.ch : null; })();
     const verifiedNote = (m) => {
       if (m.role !== "assistant" || !m.meta || !m.meta.checked || !m.meta.checked.length) return "";
       const hosts = (m.meta.sources || []).map((x) => { try { return new URL(x.url).hostname.replace(/^www\./, ""); } catch (e) { return ""; } }).filter(Boolean);
@@ -3224,7 +3273,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
       const r = await fetch(s.workerUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Access-Code": s.accessCode || "" },
-        body: JSON.stringify({ system: systemPrompt(), system_doc: writingDoc(), messages, attachments: atts, prior_silver: priorSilver(),
+        body: JSON.stringify({ system: systemPrompt(), system_doc: (docSent = writingDoc()) ? docSent : "", messages, attachments: atts, prior_silver: priorSilver(),
           stack: { holdings: s.stackOz, goal: s.stackGoal, window: s.buyWindow, premium: s.premium, window_status: windowStatus(s.buyWindow) },
           watchlist: String(s.watchlist || "").split(/[,\s]+/).filter(Boolean), shares: s.shares || {} })
       });
@@ -3266,6 +3315,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
         state.settings.notes = (state.settings.notes ? state.settings.notes + "\n" : "") + memos.map((f) => "- " + f).join("\n");
       }
       const meta = { checked: Array.isArray(data.checked) ? data.checked : [], sources: Array.isArray(data.sources) ? data.sources.slice(0, 6) : [] };
+      if (docSent && docCh) meta.docCh = docCh;
       state.history.push({ role: "user", content: text }, { role: "assistant", content: reply, meta });
       if (state.history.length > 200) state.history = state.history.slice(-200);
       save();
@@ -3803,6 +3853,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
   $("wrClose").onclick = () => wrDlg.close();
   wrDlg.addEventListener("click", (e) => { if (e.target === wrDlg) wrDlg.close(); });
   $("wrOpen").onclick = () => { const f = writing().focus; wrBookId = f ? f.book : null; wrEdit = f && f.ch ? f.ch : null; renderWriting(); wrDlg.showModal(); };
+  $("wrNext").onclick = () => focusNext();
   $("wrDone").onclick = () => { writing().focus = null; save(); renderWrBar(); note("Writing desk closed."); };
   setTimeout(() => { try { renderWrBar(); msFlush(); } catch (e) {} }, 1200);
   const dtDlg = $("dtDlg");
