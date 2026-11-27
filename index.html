@@ -205,6 +205,11 @@
   .wrdoc ins { color: #1a7f37; background: rgba(26,127,55,.10); text-decoration: underline; }
   .wrdoc del { color: #b42318; background: rgba(180,35,24,.08); text-decoration: line-through; }
   .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .linkrow { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px; }
+  .linkbtn { display: inline-grid; gap: 2px; text-decoration: none; padding: 10px 16px; font-size: 1rem; text-align: left; }
+  .linkbtn small { font-size: .74rem; opacity: .75; font-weight: 400; }
+  .siterow { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .sitemid { flex: 1; display: grid; min-width: 0; } .sitemid a { color: var(--text); font-weight: 600; text-decoration: none; } .sitemid small { color: var(--muted); }
   .suglist { display: grid; gap: 8px; padding: 10px 12px 12px; }
   .sug { background: #fbf8f1; color: #1f1f1f; border-radius: 10px; padding: 12px 14px; font: .98rem/1.5 Georgia, "Times New Roman", serif; display: grid; gap: 6px; }
   .sug[data-st="applied"], .sug[data-st="done"], .sug[data-st="skipped"] { opacity: .62; }
@@ -623,10 +628,14 @@
         <label for="sName">What DOT calls you</label>
         <input id="sName" type="text">
       </div>
+      <h2 style="font-size:1.05rem;margin-top:6px">Website shortcuts</h2>
+      <small style="color:var(--muted)">Say "DOT, open Navy Federal" and she uses the address saved here. You can also tell her to save one.</small>
+      <div id="siteList" style="display:grid;gap:6px"></div>
+      <div class="sbtns"><input id="siteName" type="text" placeholder="Name, such as Navy Federal" style="flex:1 1 160px"><input id="siteUrl" type="url" placeholder="Address, such as navyfederal.org" autocapitalize="off" style="flex:1 1 200px"><button class="btn" id="siteAdd">Add</button></div>
       <h2 style="font-size:1.05rem;margin-top:6px">Sync across devices</h2>
       <label class="check"><input id="sSync" type="checkbox"> Keep this device in sync with my other devices</label>
       <small id="syncStatus" style="color:var(--muted)">Off on this device.</small>
-      <small style="color:var(--muted);display:block;margin-top:6px">DOT app version 44</small>
+      <small style="color:var(--muted);display:block;margin-top:6px">DOT app version 45</small>
       <button class="btn" id="syncNowBtn" style="justify-self:start">Sync now</button>
       <div class="field">
         <label for="bkSel">Restore from a backup</label>
@@ -755,9 +764,9 @@
     try {
       const s = JSON.parse(localStorage.getItem(KEY));
       if (s) return { settings: { ...DEFAULTS, ...s.settings }, history: Array.isArray(s.history) ? s.history : [],
-        todos: Array.isArray(s.todos) ? s.todos : [], qnotes: Array.isArray(s.qnotes) ? s.qnotes : [], debts: Array.isArray(s.debts) ? s.debts : [], bills: Array.isArray(s.bills) ? s.bills : [], nextId: s.nextId || 1, tr: s.tr || { on: false, lang: "Spanish" }, study: s.study || null, books: s.books || null, fbank: s.fbank || null, dates: s.dates || null, writing: s.writing || null };
+        todos: Array.isArray(s.todos) ? s.todos : [], qnotes: Array.isArray(s.qnotes) ? s.qnotes : [], debts: Array.isArray(s.debts) ? s.debts : [], bills: Array.isArray(s.bills) ? s.bills : [], nextId: s.nextId || 1, tr: s.tr || { on: false, lang: "Spanish" }, study: s.study || null, books: s.books || null, fbank: s.fbank || null, dates: s.dates || null, writing: s.writing || null, sites: s.sites || null };
     } catch (e) {}
-    return { settings: { ...DEFAULTS }, history: [], todos: [], qnotes: [], debts: [], bills: [], nextId: 1, tr: { on: false, lang: "Spanish" }, study: null, books: null, fbank: null, dates: null, writing: null };
+    return { settings: { ...DEFAULTS }, history: [], todos: [], qnotes: [], debts: [], bills: [], nextId: 1, tr: { on: false, lang: "Spanish" }, study: null, books: null, fbank: null, dates: null, writing: null, sites: null };
   }
   let state = load();
   function writeLocal() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
@@ -1140,7 +1149,7 @@
   }
 
   // ---------- sync between devices ----------
-  const SYNC_SECTIONS = ["settings", "history", "todos", "qnotes", "debts", "bills", "study", "books", "fbank", "dates", "writing", "tr", "metals"];
+  const SYNC_SECTIONS = ["settings", "history", "todos", "qnotes", "debts", "bills", "study", "books", "fbank", "dates", "writing", "sites", "tr", "metals"];
   const LOCAL_ONLY = ["workerUrl", "accessCode", "voiceURI", "syncOn"];
   const SKEY = "dot.sync";
   let syncMeta = (() => { try { return JSON.parse(localStorage.getItem(SKEY)) || null; } catch (e) { return null; } })() || { times: {}, hashes: {}, rev: 0, lastSync: 0 };
@@ -1163,13 +1172,14 @@
     else if (k === "metals") saveMetals(v || {});
     else state[k] = v;
   }
-  const GUARDED = ["debts", "bills", "todos", "qnotes", "study", "books", "fbank", "dates", "writing"];
+  const GUARDED = ["debts", "bills", "todos", "qnotes", "study", "books", "fbank", "dates", "writing", "sites"];
   function isEmptySection(k, v) {
     if (v === null || v === undefined) return true;
     if (Array.isArray(v)) return v.length === 0;
     if (k === "books") return !v.list || !v.list.length;
     if (k === "study") return !v.days || !v.days.length;
     if (k === "dates") return !(v.items || []).length;
+    if (k === "sites") return !(v.items || []).length;
     if (k === "writing") return !(v.books || []).some((b) => (b.chapters || []).length || Object.keys(b.check || {}).length || (b.notes || []).length || (b.style || []).length || (b.aiLog || []).length || (b.editLog || []).length || (b.sugs || []).length || b.audience || b.voice);
     if (k === "fbank") return !(v.loans || []).length && !(v.ledger || []).length;
     return false;
@@ -1199,7 +1209,7 @@
   function fixIds() {
     let mx = state.nextId || 1;
     const scan = (arr) => (arr || []).forEach((x) => { if (x && x.id >= mx) mx = x.id + 1; });
-    scan(state.todos); scan(state.qnotes); scan(state.debts); scan(state.bills); if (state.fbank) { scan(state.fbank.loans); scan(state.fbank.ledger); } if (state.dates) scan(state.dates.items); if (state.writing) (state.writing.books || []).forEach((b) => { scan([b]); scan(b.chapters); scan(b.sugs); }); if (state.books) { scan(state.books.list); scan(state.books.playbook); }
+    scan(state.todos); scan(state.qnotes); scan(state.debts); scan(state.bills); if (state.fbank) { scan(state.fbank.loans); scan(state.fbank.ledger); } if (state.dates) scan(state.dates.items); if (state.sites) scan(state.sites.items); if (state.writing) (state.writing.books || []).forEach((b) => { scan([b]); scan(b.chapters); scan(b.sugs); }); if (state.books) { scan(state.books.list); scan(state.books.playbook); }
     state.nextId = mx;
   }
   function syncStatus(msg) { const el = $("syncStatus"); if (el) el.textContent = msg; }
@@ -1307,9 +1317,9 @@
     if (!src) { alert("That backup is empty."); return; }
     if (!confirm("Restore this backup?\n\n" + (describe(src) || "") + "\n\nYour current lists, debts, Bible plan, and reading path will be replaced. A copy of what you have now is saved first.")) return;
     backupNow("before restore");
-    ["todos", "qnotes", "debts", "bills", "study", "books", "fbank", "dates", "writing"].forEach((k) => { if (k in src) state[k] = src[k]; });
+    ["todos", "qnotes", "debts", "bills", "study", "books", "fbank", "dates", "writing", "sites"].forEach((k) => { if (k in src) state[k] = src[k]; });
     fixIds(); writeLocal();
-    if (state.settings.syncOn) { const now = Date.now(); ["todos", "qnotes", "debts", "bills", "study", "books", "fbank", "dates", "writing"].forEach((k) => { syncMeta.times[k] = now; }); rehash(); saveMeta(); syncNow(false); }
+    if (state.settings.syncOn) { const now = Date.now(); ["todos", "qnotes", "debts", "bills", "study", "books", "fbank", "dates", "writing", "sites"].forEach((k) => { syncMeta.times[k] = now; }); rehash(); saveMeta(); syncNow(false); }
     refreshAll(); note("Backup restored: " + describe(src) + ".");
     fillBackups();
   }
@@ -2206,6 +2216,51 @@
     const full = "<html><head><meta charset='utf-8'><title>Editor's Notes</title></head><body style='font-family:Georgia,serif;font-size:12pt;line-height:1.45'>" + html + "</body></html>";
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([full], { type: "application/msword" }));
     a.download = b.title.replace(/[^\w\- ]+/g, "").trim().slice(0, 50) + " - Editor's Notes.doc"; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+  }
+
+  // ---------- websites: open links and saved shortcuts ----------
+  function sites() { if (!state.sites) state.sites = { items: [] }; if (!Array.isArray(state.sites.items)) state.sites.items = []; return state.sites; }
+  function cleanUrl(u) {
+    let t = String(u || "").trim().replace(/^<|>$/g, "").replace(/[),.;]+$/, ""); if (!t) return null;
+    if (!/^[a-z][a-z0-9+.-]*:/i.test(t)) t = "https://" + t;
+    try { const x = new URL(t); if (!/^https?:$/.test(x.protocol) || !x.hostname.includes(".")) return null; return x.href; } catch (e) { return null; }
+  }
+  const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch (e) { return u; } };
+  function findSite(name) { const t = String(name || "").trim().toLowerCase(); if (!t) return null; const L = sites().items; return L.find((x) => x.name.toLowerCase() === t) || L.find((x) => x.name.toLowerCase().includes(t) || t.includes(x.name.toLowerCase())) || null; }
+  function applySiteCommand(cmd, arg, opens) {
+    const p = String(arg || "").split("|").map((x) => x.trim()), S = sites();
+    if (cmd === "OPEN_URL") {
+      const saved = !/[./]/.test(p[0]) ? findSite(p[0]) : null, url = saved ? saved.url : cleanUrl(p[0]); if (!url) return null;
+      opens.push({ url, label: p[1] || (saved && saved.name) || hostOf(url) }); return null;
+    }
+    if (cmd === "SITE_ADD") {
+      const url = cleanUrl(p[1]); if (!p[0] || !url) return null;
+      const ex = S.items.find((x) => x.name.toLowerCase() === p[0].toLowerCase());
+      if (ex) ex.url = url; else S.items.push({ id: state.nextId++, name: p[0], url });
+      return "Website shortcut saved: " + p[0] + " → " + hostOf(url);
+    }
+    if (cmd === "SITE_DELETE") { const it = findSite(p[0]); if (!it) return null; S.items = S.items.filter((x) => x !== it); return "Removed website shortcut: " + it.name; }
+    return null;
+  }
+  function sitesForPrompt() {
+    const L = sites().items;
+    return L.length ? L.map((x) => "- " + x.name + ": " + x.url).join("\n") : "- none saved yet";
+  }
+  function linksEl(links) {
+    const d = document.createElement("div"); d.className = "linkrow";
+    links.forEach((l) => { const a = document.createElement("a"); a.className = "btn primary linkbtn"; a.href = l.url; a.target = "_blank"; a.rel = "noopener noreferrer"; a.textContent = "Open " + l.label + " ↗"; const sm = document.createElement("small"); sm.textContent = hostOf(l.url); a.append(sm); d.append(a); });
+    return d;
+  }
+  function renderSites() {
+    const box = $("siteList"); if (!box) return; box.innerHTML = "";
+    const L = sites().items.slice().sort((a, b) => a.name.localeCompare(b.name));
+    if (!L.length) { const e = document.createElement("small"); e.style.color = "var(--muted)"; e.textContent = "None yet. Add your bank, insurance, and other sites you visit often, so DOT always opens the right address."; box.append(e); }
+    L.forEach((x) => {
+      const r = document.createElement("div"); r.className = "siterow";
+      const a = document.createElement("a"); a.href = x.url; a.target = "_blank"; a.rel = "noopener noreferrer"; a.textContent = x.name; const sm = document.createElement("small"); sm.textContent = hostOf(x.url);
+      const del = document.createElement("button"); del.className = "btn"; del.textContent = "Remove"; del.onclick = () => { sites().items = sites().items.filter((y) => y !== x); save(); renderSites(); };
+      const mid = document.createElement("div"); mid.className = "sitemid"; mid.append(a, sm); r.append(mid, del); box.append(r);
+    });
   }
 
   // ---------- silver buying windows and premium ----------
@@ -3130,6 +3185,7 @@
       const parts = splitBlocks(text);
       p.append(who, document.createTextNode(parts.spoken));
       let sgi = 0; parts.blocks.forEach((b) => p.append(outlineCard(b, parts.spoken, meta, b.kind === "suggest" ? sgi++ : -1)));
+      if (meta && meta.links && meta.links.length) p.append(linksEl(meta.links));
       const se = sourcesEl(meta); if (se) p.append(se);
       if (parts.spoken.trim()) {
         const rb = document.createElement("button"); rb.className = "replay"; rb.textContent = "▶ Hear again";
@@ -3268,6 +3324,12 @@ then [[/SUGGEST]]. Give up to 30 suggestions per reply, in the order they appear
 Write plain text inside blocks, with blank lines between paragraphs and no markdown. Outside the blocks, say in one to three spoken sentences what you did and suggest the next step. An EDIT block replaces the whole chapter, so it must always contain the complete chapter text. One reply holds about 5,000 words; if a chapter is longer than that, do not send an EDIT block. Give your critique or a list of corrections instead, and suggest he tap Split into sections on the writing desk so you can edit each section in full. When reviewing a long chapter, work in order and keep track of where you stopped so he can say "continue." HOW EDITS WORK, follow exactly: You can edit only the ACTIVE CHAPTER, whose full text is at the start of your instructions; use its exact id in the EDIT block. For any other chapter you have no text, so never write an EDIT or DRAFT block for it, and never rebuild a chapter from memory, summaries, or earlier replies. If he asks about a different chapter, add WRITE_FOCUS for it and ask him to send the request again so you receive its text. You never apply, save, or change his text yourself; nothing changes until he taps Apply, Accept changes, or Add to chapter. So never say you made, applied, or saved a change; say "Here are my suggestions for [chapter]. They are in your Editor's Notes." The app checks each EDIT block against his text and refuses one that does not match. An EDIT block keeps every sentence of his chapter in order, changing only what needs correcting.
 Edit or critique only text you can actually see in this conversation; if the chapter text is not included, ask him to open it on the writing desk or paste it.
 Record changes with one final line each, never read aloud: WRITE_FOCUS: book id or title | chapter number or title (opens a chapter so its text is included next time); WRITE_FOCUS_OFF; WRITE_CHAPTER_ADD: book id | chapter title; WRITE_SUMMARY: chapter id | two-sentence summary (add one whenever you have read a chapter that lacks a summary or has changed); WRITE_STATUS: chapter id | Draft, Edited, or Final; WRITE_STAGE: book id | Drafting, Revising, Editing, Proofreading, Ready to publish, or Published; WRITE_CHECK: book id | checklist item | done or undo (only when he says it is done); WRITE_STYLE: book id | style rule; WRITE_NOTE: book id | editor's note to remember; WRITE_DETAILS: book id | title, subtitle, author, genre, audience, voice, or basis | new value; WRITE_BOOK_ADD: title | subtitle | genre.`,
+
+      `WEBSITES
+You can open websites for ${name}. Add one final line, never read aloud: OPEN_URL: web address or saved shortcut name | short label. The app shows a button he taps to open the page, since browsers only open pages from his tap; so say "Here's [site], tap the button to open it," never that it is already open.
+His saved shortcuts (always use these first):
+${sitesForPrompt()}
+For a site not saved, find the official address with web search and use only the organization's own official domain. For banks, lenders, insurance, TRICARE, VA, IRS, and other government or medical sites, be strict: never use an ad, a lookalike, or a third-party page, and if you cannot confirm the official domain, say so instead of guessing. If it is a site he will likely use again, offer to save it, and after he agrees add: SITE_ADD: name | web address. To remove one: SITE_DELETE: name. You can open pages but cannot sign in, see his accounts, or act on a site. Never ask for or accept passwords or account numbers.`,
 
       `BIRTHDAYS AND ANNIVERSARIES
 ${name} keeps birthdays and anniversaries for his family and church members. The app calculates every date, day count, age, and number of years:
@@ -3436,8 +3498,8 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
       reply = reply.replace(/^\s*STACK:\s*([\d.]+).*$/gim, (m, n) => { stackNew = Number(n); return ""; }).trim() || "Noted.";
       if (stackNew !== null && !isNaN(stackNew)) state.settings.stackOz = stackNew;
       recordSilver(data.metals);
-      const listChanges = [];
-      reply = reply.replace(/^\s*(TODO_ADD|TODO_DONE|TODO_UNDONE|TODO_DELETE|NOTE_DELETE|NOTE|DEBT_ADD|DEBT_PAY|DEBT_BALANCE|DEBT_TERMS|DEBT_PLAN|DEBT_DELETE|DEBT_DUE|BILL_ADD|BILL_PAID|BILL_DELETE|BILL_EDIT|FBANK_CONTRIB|FBANK_REQUEST|FBANK_APPROVE|FBANK_DECLINE|FBANK_FUND|FBANK_PAY|FBANK_AFR|DATE_ADD|DATE_EDIT|DATE_DELETE|DATE_LEAD|SILVER_WINDOW|SILVER_PREMIUM|SILVER_GOAL|WRITE_BOOK_ADD|WRITE_FOCUS_OFF|WRITE_FOCUS|WRITE_SUMMARY|WRITE_STATUS|WRITE_CHAPTER_ADD|WRITE_STYLE|WRITE_NOTE|WRITE_STAGE|WRITE_CHECK|WRITE_DETAILS|STUDY_PLAN|STUDY_THEME|STUDY_READ|STUDY_SCORE|BOOK_ADD|BOOK_START|BOOK_PROGRESS|BOOK_DONE|BOOK_SKIP|BOOK_REMOVE|BOOK_CHECK|BOOK_REVIEWED|PLAYBOOK|TIMER_START|TIMER_STOP|TIMER_ADD):\s*(.*)$/gim, (m, cmd, arg) => {
+      const listChanges = [], opens = [];
+      reply = reply.replace(/^\s*(TODO_ADD|TODO_DONE|TODO_UNDONE|TODO_DELETE|NOTE_DELETE|NOTE|DEBT_ADD|DEBT_PAY|DEBT_BALANCE|DEBT_TERMS|DEBT_PLAN|DEBT_DELETE|DEBT_DUE|BILL_ADD|BILL_PAID|BILL_DELETE|BILL_EDIT|FBANK_CONTRIB|FBANK_REQUEST|FBANK_APPROVE|FBANK_DECLINE|FBANK_FUND|FBANK_PAY|FBANK_AFR|DATE_ADD|DATE_EDIT|DATE_DELETE|DATE_LEAD|SILVER_WINDOW|SILVER_PREMIUM|SILVER_GOAL|OPEN_URL|SITE_ADD|SITE_DELETE|WRITE_BOOK_ADD|WRITE_FOCUS_OFF|WRITE_FOCUS|WRITE_SUMMARY|WRITE_STATUS|WRITE_CHAPTER_ADD|WRITE_STYLE|WRITE_NOTE|WRITE_STAGE|WRITE_CHECK|WRITE_DETAILS|STUDY_PLAN|STUDY_THEME|STUDY_READ|STUDY_SCORE|BOOK_ADD|BOOK_START|BOOK_PROGRESS|BOOK_DONE|BOOK_SKIP|BOOK_REMOVE|BOOK_CHECK|BOOK_REVIEWED|PLAYBOOK|TIMER_START|TIMER_STOP|TIMER_ADD):\s*(.*)$/gim, (m, cmd, arg) => {
         const C = cmd.toUpperCase();
         if (C.startsWith("TIMER_")) {
           let tm = null;
@@ -3447,7 +3509,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
           if (tm) listChanges.push(tm);
           return "";
         }
-        const msg = C.startsWith("WRITE_") ? applyWriteCommand(C, arg.trim()) : C.startsWith("SILVER_") ? applySilverCommand(C, arg.trim()) : C.startsWith("DATE_") ? applyDateCommand(C, arg.trim()) : C.startsWith("FBANK_") ? applyFbankCommand(C, arg.trim()) : (C === "DEBT_DUE" || C.startsWith("BILL_")) ? applyBillCommand(C, arg.trim()) : C.startsWith("DEBT_") ? applyDebtCommand(C, arg.trim()) : C.startsWith("STUDY_") ? applyStudyCommand(C, arg.trim())
+        const msg = (C === "OPEN_URL" || C.startsWith("SITE_")) ? applySiteCommand(C, arg.trim(), opens) : C.startsWith("WRITE_") ? applyWriteCommand(C, arg.trim()) : C.startsWith("SILVER_") ? applySilverCommand(C, arg.trim()) : C.startsWith("DATE_") ? applyDateCommand(C, arg.trim()) : C.startsWith("FBANK_") ? applyFbankCommand(C, arg.trim()) : (C === "DEBT_DUE" || C.startsWith("BILL_")) ? applyBillCommand(C, arg.trim()) : C.startsWith("DEBT_") ? applyDebtCommand(C, arg.trim()) : C.startsWith("STUDY_") ? applyStudyCommand(C, arg.trim())
           : (C.startsWith("BOOK_") || C === "PLAYBOOK") ? applyBookCommand(C, arg.trim()) : applyListCommand(C, arg.trim());
         if (msg) listChanges.push(msg);
         return "";
@@ -3456,6 +3518,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
         state.settings.notes = (state.settings.notes ? state.settings.notes + "\n" : "") + memos.map((f) => "- " + f).join("\n");
       }
       const meta = { checked: Array.isArray(data.checked) ? data.checked : [], sources: Array.isArray(data.sources) ? data.sources.slice(0, 6) : [] };
+      if (opens.length) meta.links = opens.slice(0, 4);
       if (docSent && docCh) { meta.docCh = docCh; try { meta.sugIds = storeSuggestions(reply, docCh); } catch (e) {} }
       state.history.push({ role: "user", content: text }, { role: "assistant", content: reply, meta });
       if (state.history.length > 200) state.history = state.history.slice(-200);
@@ -3934,7 +3997,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
     $("sSync").checked = !!s.syncOn;
     fillBackups();
     if (!s.syncOn) syncStatus("Off on this device."); $("sPalette").value = s.palette; $("sBible").value = s.bible; $("sEpisodes").value = s.episodes || "";
-    loadVoices();
+    loadVoices(); try { renderSites(); } catch (e) {}
     formSnap = readForm();
     if (!dlg.open) dlg.showModal();
   }
@@ -3997,6 +4060,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
   $("wrNext").onclick = () => focusNext();
   $("wrDone").onclick = () => { writing().focus = null; save(); renderWrBar(); note("Writing desk closed."); };
   setTimeout(() => { try { renderWrBar(); msFlush(); } catch (e) {} }, 1200);
+  $("siteAdd").onclick = () => { const m = applySiteCommand("SITE_ADD", $("siteName").value + "|" + $("siteUrl").value, []); if (!m) { note("Enter a name and a web address, such as navyfederal.org."); return; } $("siteName").value = ""; $("siteUrl").value = ""; save(); renderSites(); };
   const dtDlg = $("dtDlg");
   $("dtBtn").onclick = () => { dtEditing = null; renderDates(); dtDlg.showModal(); };
   $("dtClose").onclick = () => dtDlg.close();
