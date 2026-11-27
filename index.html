@@ -205,6 +205,11 @@
   .wrdoc ins { color: #1a7f37; background: rgba(26,127,55,.10); text-decoration: underline; }
   .wrdoc del { color: #b42318; background: rgba(180,35,24,.08); text-decoration: line-through; }
   .btn:disabled { opacity: .45; cursor: not-allowed; }
+  #siteName, #siteUrl { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: inherit; min-width: 0; }
+  .coach-btn { border-color: rgba(255,190,90,.55) !important; }
+  .coachrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; } .coachrow > span:first-child { min-width: 110px; color: var(--muted); }
+  .coachrow select, .coachrow input { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: inherit; }
+  .coachareas { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 12px; }
   .linkrow { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px; }
   .linkbtn { display: inline-grid; gap: 2px; text-decoration: none; padding: 10px 16px; font-size: 1rem; text-align: left; }
   .linkbtn small { font-size: .74rem; opacity: .75; font-weight: 400; }
@@ -628,6 +633,8 @@
         <label for="sName">What DOT calls you</label>
         <input id="sName" type="text">
       </div>
+      <h2 style="font-size:1.05rem;margin-top:6px">Life coach</h2>
+      <div id="coachBox" style="display:grid;gap:8px"></div>
       <h2 style="font-size:1.05rem;margin-top:6px">Website shortcuts</h2>
       <small style="color:var(--muted)">Say "DOT, open Navy Federal" and she uses the address saved here. You can also tell her to save one.</small>
       <div id="siteList" style="display:grid;gap:6px"></div>
@@ -635,7 +642,7 @@
       <h2 style="font-size:1.05rem;margin-top:6px">Sync across devices</h2>
       <label class="check"><input id="sSync" type="checkbox"> Keep this device in sync with my other devices</label>
       <small id="syncStatus" style="color:var(--muted)">Off on this device.</small>
-      <small style="color:var(--muted);display:block;margin-top:6px">DOT app version 45</small>
+      <small style="color:var(--muted);display:block;margin-top:6px">DOT app version 46</small>
       <button class="btn" id="syncNowBtn" style="justify-self:start">Sync now</button>
       <div class="field">
         <label for="bkSel">Restore from a backup</label>
@@ -764,9 +771,9 @@
     try {
       const s = JSON.parse(localStorage.getItem(KEY));
       if (s) return { settings: { ...DEFAULTS, ...s.settings }, history: Array.isArray(s.history) ? s.history : [],
-        todos: Array.isArray(s.todos) ? s.todos : [], qnotes: Array.isArray(s.qnotes) ? s.qnotes : [], debts: Array.isArray(s.debts) ? s.debts : [], bills: Array.isArray(s.bills) ? s.bills : [], nextId: s.nextId || 1, tr: s.tr || { on: false, lang: "Spanish" }, study: s.study || null, books: s.books || null, fbank: s.fbank || null, dates: s.dates || null, writing: s.writing || null, sites: s.sites || null };
+        todos: Array.isArray(s.todos) ? s.todos : [], qnotes: Array.isArray(s.qnotes) ? s.qnotes : [], debts: Array.isArray(s.debts) ? s.debts : [], bills: Array.isArray(s.bills) ? s.bills : [], nextId: s.nextId || 1, tr: s.tr || { on: false, lang: "Spanish" }, study: s.study || null, books: s.books || null, fbank: s.fbank || null, dates: s.dates || null, writing: s.writing || null, sites: s.sites || null, coach: s.coach || null };
     } catch (e) {}
-    return { settings: { ...DEFAULTS }, history: [], todos: [], qnotes: [], debts: [], bills: [], nextId: 1, tr: { on: false, lang: "Spanish" }, study: null, books: null, fbank: null, dates: null, writing: null, sites: null };
+    return { settings: { ...DEFAULTS }, history: [], todos: [], qnotes: [], debts: [], bills: [], nextId: 1, tr: { on: false, lang: "Spanish" }, study: null, books: null, fbank: null, dates: null, writing: null, sites: null, coach: null };
   }
   let state = load();
   function writeLocal() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
@@ -1149,7 +1156,7 @@
   }
 
   // ---------- sync between devices ----------
-  const SYNC_SECTIONS = ["settings", "history", "todos", "qnotes", "debts", "bills", "study", "books", "fbank", "dates", "writing", "sites", "tr", "metals"];
+  const SYNC_SECTIONS = ["settings", "history", "todos", "qnotes", "debts", "bills", "study", "books", "fbank", "dates", "writing", "sites", "coach", "tr", "metals"];
   const LOCAL_ONLY = ["workerUrl", "accessCode", "voiceURI", "syncOn"];
   const SKEY = "dot.sync";
   let syncMeta = (() => { try { return JSON.parse(localStorage.getItem(SKEY)) || null; } catch (e) { return null; } })() || { times: {}, hashes: {}, rev: 0, lastSync: 0 };
@@ -1172,7 +1179,7 @@
     else if (k === "metals") saveMetals(v || {});
     else state[k] = v;
   }
-  const GUARDED = ["debts", "bills", "todos", "qnotes", "study", "books", "fbank", "dates", "writing", "sites"];
+  const GUARDED = ["debts", "bills", "todos", "qnotes", "study", "books", "fbank", "dates", "writing", "sites", "coach"];
   function isEmptySection(k, v) {
     if (v === null || v === undefined) return true;
     if (Array.isArray(v)) return v.length === 0;
@@ -1180,6 +1187,7 @@
     if (k === "study") return !v.days || !v.days.length;
     if (k === "dates") return !(v.items || []).length;
     if (k === "sites") return !(v.items || []).length;
+    if (k === "coach") return !(v.commits || []).length && !(v.log || []).length && !(v.asks || []).length && !v.lastSession;
     if (k === "writing") return !(v.books || []).some((b) => (b.chapters || []).length || Object.keys(b.check || {}).length || (b.notes || []).length || (b.style || []).length || (b.aiLog || []).length || (b.editLog || []).length || (b.sugs || []).length || b.audience || b.voice);
     if (k === "fbank") return !(v.loans || []).length && !(v.ledger || []).length;
     return false;
@@ -1209,7 +1217,7 @@
   function fixIds() {
     let mx = state.nextId || 1;
     const scan = (arr) => (arr || []).forEach((x) => { if (x && x.id >= mx) mx = x.id + 1; });
-    scan(state.todos); scan(state.qnotes); scan(state.debts); scan(state.bills); if (state.fbank) { scan(state.fbank.loans); scan(state.fbank.ledger); } if (state.dates) scan(state.dates.items); if (state.sites) scan(state.sites.items); if (state.writing) (state.writing.books || []).forEach((b) => { scan([b]); scan(b.chapters); scan(b.sugs); }); if (state.books) { scan(state.books.list); scan(state.books.playbook); }
+    scan(state.todos); scan(state.qnotes); scan(state.debts); scan(state.bills); if (state.fbank) { scan(state.fbank.loans); scan(state.fbank.ledger); } if (state.dates) scan(state.dates.items); if (state.sites) scan(state.sites.items); if (state.coach) scan(state.coach.commits); if (state.writing) (state.writing.books || []).forEach((b) => { scan([b]); scan(b.chapters); scan(b.sugs); }); if (state.books) { scan(state.books.list); scan(state.books.playbook); }
     state.nextId = mx;
   }
   function syncStatus(msg) { const el = $("syncStatus"); if (el) el.textContent = msg; }
@@ -1317,9 +1325,9 @@
     if (!src) { alert("That backup is empty."); return; }
     if (!confirm("Restore this backup?\n\n" + (describe(src) || "") + "\n\nYour current lists, debts, Bible plan, and reading path will be replaced. A copy of what you have now is saved first.")) return;
     backupNow("before restore");
-    ["todos", "qnotes", "debts", "bills", "study", "books", "fbank", "dates", "writing", "sites"].forEach((k) => { if (k in src) state[k] = src[k]; });
+    ["todos", "qnotes", "debts", "bills", "study", "books", "fbank", "dates", "writing", "sites", "coach"].forEach((k) => { if (k in src) state[k] = src[k]; });
     fixIds(); writeLocal();
-    if (state.settings.syncOn) { const now = Date.now(); ["todos", "qnotes", "debts", "bills", "study", "books", "fbank", "dates", "writing", "sites"].forEach((k) => { syncMeta.times[k] = now; }); rehash(); saveMeta(); syncNow(false); }
+    if (state.settings.syncOn) { const now = Date.now(); ["todos", "qnotes", "debts", "bills", "study", "books", "fbank", "dates", "writing", "sites", "coach"].forEach((k) => { syncMeta.times[k] = now; }); rehash(); saveMeta(); syncNow(false); }
     refreshAll(); note("Backup restored: " + describe(src) + ".");
     fillBackups();
   }
@@ -1367,7 +1375,7 @@
     const team = "\nTEAMMATE. You are " + name + "'s trusted AI teammate, not a servant and not a yes-man." +
       "\n- Earn trust: be consistent, keep your word, admit a mistake the moment you see it, and never pretend to know or to have done something." +
       "\n- Come to know him: pay attention to his goals, priorities, routines, the people who matter to him, how he likes information delivered, and what he is working toward. Use what you know to make your help more personal and more useful." +
-      "\n- When the conversation is relaxed and not task-focused, you may ask one thoughtful question to understand him better, such as what he is aiming for or how he wants something handled. At most one such question in a conversation, and never during a task, bad news, or a serious moment." +
+      "\n- When the conversation is relaxed and not task-focused, you may ask one thoughtful question to understand him better, such as what he is aiming for or how he wants something handled. At most one such question in a conversation, and never during a task, bad news, or a serious moment. Coaching check-ins and sessions started from the app follow the LIFE COACH rules instead." +
       "\n- Think ahead together: treat his goals as shared objectives. Track progress, flag risks early, and suggest the next move.";
     return "PERSONALITY\n" + toneLine + "\n" + humorLine + core + intj + team +
       "\nYou care about " + name + "'s success and wellbeing and show it through attentiveness and candor. Your personality never changes the accuracy rules below." +
@@ -2260,6 +2268,107 @@
       const a = document.createElement("a"); a.href = x.url; a.target = "_blank"; a.rel = "noopener noreferrer"; a.textContent = x.name; const sm = document.createElement("small"); sm.textContent = hostOf(x.url);
       const del = document.createElement("button"); del.className = "btn"; del.textContent = "Remove"; del.onclick = () => { sites().items = sites().items.filter((y) => y !== x); save(); renderSites(); };
       const mid = document.createElement("div"); mid.className = "sitemid"; mid.append(a, sm); r.append(mid, del); box.append(r);
+    });
+  }
+
+  // ---------- life coach: check-ins, weekly session, commitments ----------
+  const COACH_AREAS = ["Faith and spiritual life", "Family", "Finances", "Health", "Ministry and retirement transition", "Writing"];
+  const COACH_FREQ = { off: "Off", few: "A few times a week", daily: "Once a day", twice: "Twice a day" };
+  const COACH_STYLE = { challenge: "Mostly challenge", balance: "Balance, leaning toward challenge", encourage: "Mostly encourage" };
+  const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  function coach() {
+    if (!state.coach) state.coach = { on: true, freq: "daily", style: "balance", areas: COACH_AREAS.slice(), sessionDay: 0, sessionTime: "19:00", quietStart: "21:30", quietEnd: "07:00", asks: [], lastSession: "", commits: [], log: [] };
+    const C = state.coach; ["asks", "commits", "log", "areas"].forEach((k) => { if (!Array.isArray(C[k])) C[k] = k === "areas" ? COACH_AREAS.slice() : []; });
+    return C;
+  }
+  const hm = (t) => { const [h, m] = String(t || "0:0").split(":").map(Number); return (h || 0) * 60 + (m || 0); };
+  const nowMin = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
+  function inQuiet(C) { const n = nowMin(), a = hm(C.quietStart), b = hm(C.quietEnd); return a > b ? (n >= a || n < b) : (n >= a && n < b); }
+  function coachPlan() {
+    // random check-in times for today, chosen once per day between 9:00 AM and 6:00 PM
+    const C = coach(), today = todayStr(); let plan = null;
+    try { plan = JSON.parse(localStorage.getItem("dot.coachPlan")); } catch (e) {}
+    if (!plan || plan.date !== today) {
+      const n = C.freq === "twice" ? 2 : 1, times = [];
+      for (let i = 0; i < n; i++) { const lo = 9 * 60 + i * 270, hi = lo + (n === 2 ? 270 : 540); times.push(Math.floor(lo + Math.random() * (hi - lo))); }
+      plan = { date: today, times: times.sort((a, b) => a - b) };
+      try { localStorage.setItem("dot.coachPlan", JSON.stringify(plan)); } catch (e) {}
+    }
+    return plan;
+  }
+  function coachDue() {
+    const C = coach(), d = new Date(), today = todayStr();
+    if (d.getDay() === Number(C.sessionDay) && nowMin() >= hm(C.sessionTime) && C.lastSession !== today) return "session";
+    if (!C.on || C.freq === "off" || inQuiet(C) || d.getDay() === Number(C.sessionDay)) return null;
+    const asksToday = C.asks.filter((x) => x === today).length;
+    if (C.freq === "few") { const last = C.asks.slice(-1)[0]; if (last && (parseYmd(today) - parseYmd(last)) / 86400000 < 2) return null; if (asksToday) return null; }
+    const plan = coachPlan(), due = plan.times.filter((t) => nowMin() >= t).length;
+    return asksToday < due ? "checkin" : null;
+  }
+  function coachButton(kind) {
+    const b = document.createElement("button"); b.className = "btn primary coach-btn"; b.style.alignSelf = "flex-start"; b.dataset.kind = kind;
+    b.innerHTML = kind === "session" ? "🧭 <span>Your weekly coaching session is ready. Tap to begin.</span>" : "🧭 <span>DOT has a coaching question for you. Tap to hear it.</span>";
+    b.onclick = () => coachStart(kind); return b;
+  }
+  function coachOffer() {
+    if (busy || document.querySelector(".coach-btn")) return;
+    const k = coachDue(); if (!k) return;
+    const empty = logEl.querySelector(".empty"); if (empty) empty.remove();
+    logEl.append(coachButton(k)); scrollDown();
+  }
+  function coachStart(kind) {
+    if (busy) return;
+    const C = coach(), today = todayStr();
+    document.querySelectorAll(".coach-btn").forEach((x) => x.remove());
+    if (kind === "session") C.lastSession = today; else { C.asks.push(today); if (C.asks.length > 60) C.asks = C.asks.slice(-60); }
+    save(); unlockSpeech(); lastInputVoice = false;
+    ask(kind === "session"
+      ? "[Weekly coaching session, started from the app] Lead my weekly coaching session now. Go one step at a time and wait for my answer after each: 1) my wins this week; 2) each commitment that is due or overdue, briefly; 3) what did not go as planned and what I learned; 4) my focus for the coming week in my coaching areas; 5) one to three specific commitments with due dates. Begin with step 1: one short greeting and one question."
+      : "[Coaching check-in, started from the app] Ask me one coaching question now about one of my coaching areas. Choose what matters most this week: an open or overdue commitment, a goal, or recent progress you can see in my records. Rotate areas from recent check-ins. One open question, under 40 words, with at most a few words of greeting, then wait for my answer.", false, { hidden: true });
+  }
+  function findCommit(ref) { const C = coach(), t = String(ref || "").trim().replace(/^#/, "").toLowerCase(); if (!t) return null; return C.commits.find((x) => String(x.id) === t) || C.commits.find((x) => x.text.toLowerCase().includes(t)) || null; }
+  function applyCoachCommand(cmd, arg) {
+    const C = coach(), p = String(arg || "").split("|").map((x) => x.trim());
+    if (cmd === "COACH_COMMIT") { if (!p[0]) return null; const due = /^\d{4}-\d{2}-\d{2}$/.test(p[1] || "") ? p[1] : ""; const it = { id: state.nextId++, text: p[0], due, area: p[2] || "", status: "open", created: todayStr() }; C.commits.push(it); return "Commitment recorded: " + it.text + (due ? " (by " + fmtShort(due) + ")" : ""); }
+    if (cmd === "COACH_DONE" || cmd === "COACH_DROP") { const it = findCommit(p[0]); if (!it) return null; it.status = cmd === "COACH_DONE" ? "done" : "dropped"; it.closed = todayStr(); return (cmd === "COACH_DONE" ? "✓ Commitment kept: " : "Commitment set aside: ") + it.text; }
+    if (cmd === "COACH_LOG") { if (!p[1] && !p[2]) return null; C.log.push({ date: todayStr(), area: p[0] || "", q: p[1] || "", a: p[2] || "" }); if (C.log.length > 200) C.log = C.log.slice(-200); return null; }
+    return null;
+  }
+  function coachForPrompt() {
+    const C = coach(), today = todayStr();
+    const open = C.commits.filter((x) => x.status === "open");
+    const lines = ["Settings: " + (C.on && C.freq !== "off" ? COACH_FREQ[C.freq] + " check-ins" : "check-ins off") + "; style: " + COACH_STYLE[C.style] + "; weekly session " + DAYS[C.sessionDay] + "s at " + C.sessionTime + ". Coaching areas: " + C.areas.join(", ") + "."];
+    lines.push("Open commitments (dates calculated by the app):\n" + (open.length ? open.map((x) => "- #" + x.id + " " + x.text + (x.due ? " — due " + fmtShort(x.due) + (x.due < today ? " (OVERDUE)" : x.due === today ? " (due today)" : "") : "") + (x.area ? " [" + x.area + "]" : "")).join("\n") : "- none"));
+    const kept = C.commits.filter((x) => x.status === "done").slice(-5); if (kept.length) lines.push("Recently kept: " + kept.map((x) => x.text + " (" + x.closed + ")").join("; "));
+    const log = C.log.slice(-8); if (log.length) lines.push("Recent coaching exchanges:\n" + log.map((x) => "- " + x.date + (x.area ? " [" + x.area + "]" : "") + " Q: " + x.q + " A: " + x.a).join("\n"));
+    return lines.join("\n");
+  }
+  function renderCoach() {
+    const box = $("coachBox"); if (!box) return; box.innerHTML = "";
+    const C = coach();
+    const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt !== undefined) e.textContent = txt; return e; };
+    const sel = (opts, val, fn) => { const s = el("select"); Object.entries(opts).forEach(([k, v]) => s.append(new Option(v, k))); s.value = String(val); s.onchange = () => { fn(s.value); save(); renderCoach(); }; return s; };
+    const row = (label, ctl) => { const r = el("div", "coachrow"); r.append(el("span", "", label), ctl); return r; };
+    const on = el("label", "check"); const cb = el("input"); cb.type = "checkbox"; cb.checked = !!C.on; cb.onchange = () => { C.on = cb.checked; save(); }; on.append(cb, document.createTextNode(" Coaching check-ins on"));
+    box.append(on, row("How often", sel(COACH_FREQ, C.freq, (v) => { C.freq = v; try { localStorage.removeItem("dot.coachPlan"); } catch (e) {} })), row("Style", sel(COACH_STYLE, C.style, (v) => (C.style = v))));
+    const dsel = el("select"); DAYS.forEach((d, i) => dsel.append(new Option(d, i))); dsel.value = String(C.sessionDay); dsel.onchange = () => { C.sessionDay = Number(dsel.value); save(); };
+    const ti = el("input"); ti.type = "time"; ti.value = C.sessionTime; ti.onchange = () => { C.sessionTime = ti.value || "19:00"; save(); };
+    const sr = el("div", "coachrow"); sr.append(el("span", "", "Weekly session"), dsel, ti); box.append(sr);
+    const q1 = el("input"); q1.type = "time"; q1.value = C.quietStart; q1.onchange = () => { C.quietStart = q1.value; save(); };
+    const q2 = el("input"); q2.type = "time"; q2.value = C.quietEnd; q2.onchange = () => { C.quietEnd = q2.value; save(); };
+    const qr = el("div", "coachrow"); qr.append(el("span", "", "Quiet hours"), q1, el("span", "", "to"), q2); box.append(qr);
+    const ar = el("div", "coachareas"); COACH_AREAS.forEach((a) => { const l = el("label", "check"); const c = el("input"); c.type = "checkbox"; c.checked = C.areas.includes(a); c.onchange = () => { C.areas = COACH_AREAS.filter((x) => x === a ? c.checked : C.areas.includes(x)); save(); }; l.append(c, document.createTextNode(" " + a)); ar.append(l); });
+    box.append(el("small", "", "Coaching areas"), ar);
+    const go = el("button", "btn", "Start a coaching session now"); go.onclick = () => { document.querySelectorAll("dialog[open]").forEach((d) => d.close()); coachStart("session"); };
+    box.append(go);
+    const open = C.commits.filter((x) => x.status === "open");
+    box.append(el("small", "", "Commitments" + (open.length ? " (" + open.length + " open)" : "")));
+    if (!open.length) box.append(el("small", "muted", "None open. In a coaching session, DOT will help you set them."));
+    open.forEach((x) => {
+      const r = el("div", "siterow"); const mid = el("div", "sitemid"); mid.append(el("strong", "", x.text), el("small", "", (x.due ? "Due " + fmtShort(x.due) + (x.due < todayStr() ? " · overdue" : "") : "No date") + (x.area ? " · " + x.area : "")));
+      const d = el("button", "btn", "Done"); d.onclick = () => { x.status = "done"; x.closed = todayStr(); save(); renderCoach(); };
+      const rm = el("button", "btn", "Remove"); rm.onclick = () => { C.commits = C.commits.filter((y) => y !== x); save(); renderCoach(); };
+      r.append(mid, d, rm); box.append(r);
     });
   }
 
@@ -3229,7 +3338,7 @@
       logEl.append(p);
       return;
     }
-    state.history.forEach((m) => logEl.append(msgEl(m.role, m.content, m.meta)));
+    state.history.forEach((m) => { if (!m.hidden) logEl.append(msgEl(m.role, m.content, m.meta)); });
     renderTrBar();
     scrollDown();
   }
@@ -3324,6 +3433,13 @@ then [[/SUGGEST]]. Give up to 30 suggestions per reply, in the order they appear
 Write plain text inside blocks, with blank lines between paragraphs and no markdown. Outside the blocks, say in one to three spoken sentences what you did and suggest the next step. An EDIT block replaces the whole chapter, so it must always contain the complete chapter text. One reply holds about 5,000 words; if a chapter is longer than that, do not send an EDIT block. Give your critique or a list of corrections instead, and suggest he tap Split into sections on the writing desk so you can edit each section in full. When reviewing a long chapter, work in order and keep track of where you stopped so he can say "continue." HOW EDITS WORK, follow exactly: You can edit only the ACTIVE CHAPTER, whose full text is at the start of your instructions; use its exact id in the EDIT block. For any other chapter you have no text, so never write an EDIT or DRAFT block for it, and never rebuild a chapter from memory, summaries, or earlier replies. If he asks about a different chapter, add WRITE_FOCUS for it and ask him to send the request again so you receive its text. You never apply, save, or change his text yourself; nothing changes until he taps Apply, Accept changes, or Add to chapter. So never say you made, applied, or saved a change; say "Here are my suggestions for [chapter]. They are in your Editor's Notes." The app checks each EDIT block against his text and refuses one that does not match. An EDIT block keeps every sentence of his chapter in order, changing only what needs correcting.
 Edit or critique only text you can actually see in this conversation; if the chapter text is not included, ask him to open it on the writing desk or paste it.
 Record changes with one final line each, never read aloud: WRITE_FOCUS: book id or title | chapter number or title (opens a chapter so its text is included next time); WRITE_FOCUS_OFF; WRITE_CHAPTER_ADD: book id | chapter title; WRITE_SUMMARY: chapter id | two-sentence summary (add one whenever you have read a chapter that lacks a summary or has changed); WRITE_STATUS: chapter id | Draft, Edited, or Final; WRITE_STAGE: book id | Drafting, Revising, Editing, Proofreading, Ready to publish, or Published; WRITE_CHECK: book id | checklist item | done or undo (only when he says it is done); WRITE_STYLE: book id | style rule; WRITE_NOTE: book id | editor's note to remember; WRITE_DETAILS: book id | title, subtitle, author, genre, audience, voice, or basis | new value; WRITE_BOOK_ADD: title | subtitle | genre.`,
+
+      `LIFE COACH
+You are also ${name}'s life coach.
+${coachForPrompt()}
+When a message begins with [Coaching check-in, started from the app] or [Weekly coaching session, started from the app], you are coaching. Coaching voice: direct, warm, and focused; drop the dry and sardonic humor while coaching; keep your candor. Style: ${({ challenge: "mostly challenge: press him on follow-through, name excuses kindly but plainly, and raise the bar", balance: "a balance leaning toward challenge: affirm real progress, then press on what is next", encourage: "mostly encourage: build on strengths and momentum, and still be honest" })[coach().style]}.
+How to coach: ask one open question at a time and let him think; listen more than you advise; reflect back what he said in a sentence before the next question; help him find his own answer before offering yours; tie questions to his goals, faith, and the records you can see. Ask permission before going into a sensitive area. You coach goals, growth, decisions, and follow-through; you are not a counselor or therapist. If he raises grief, depression, a crisis, or a health concern, respond with care and encourage the right support instead of coaching it.
+Commitments: when he commits to a specific action, add one final line: COACH_COMMIT: the commitment in his words | due date YYYY-MM-DD if he gave one | area. When he says one is done: COACH_DONE: id. If he drops one: COACH_DROP: id. After he answers a coaching question, add: COACH_LOG: area | your question in brief | his answer in brief. Never read these lines aloud. In a briefing, mention commitments that are due today or overdue in one sentence.`,
 
       `WEBSITES
 You can open websites for ${name}. Add one final line, never read aloud: OPEN_URL: web address or saved shortcut name | short label. The app shows a button he taps to open the page, since browsers only open pages from his tap; so say "Here's [site], tap the button to open it," never that it is already open.
@@ -3447,7 +3563,8 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
       setTimeout(() => { if (document.body.dataset.mode === "idle" && !busy) toggleListening(); }, 500);
     }
   }
-  async function ask(text, reverse) {
+  async function ask(text, reverse, opts) {
+    opts = opts || {};
     text = text.trim();
     const atts = pending.length && !(state.tr && state.tr.on) ? pending.map(({ media_type, data }) => ({ media_type, data })) : [];
     const attNames = pending.map((a) => a.name);
@@ -3459,7 +3576,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
     if (!s.workerUrl) { note("DOT is offline. Add your Worker address in Settings."); openSettings(); return; }
     busy = true;
     const empty = logEl.querySelector(".empty"); if (empty) empty.remove();
-    logEl.append(msgEl("user", text)); scrollDown();
+    if (!opts.hidden) logEl.append(msgEl("user", text)); scrollDown();
     setMode("thinking");
     try { await prepWriting(); } catch (e) {}
     let docSent = "", docCh = (() => { const f = state.writing && state.writing.focus; return f && f.ch ? f.ch : null; })();
@@ -3499,7 +3616,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
       if (stackNew !== null && !isNaN(stackNew)) state.settings.stackOz = stackNew;
       recordSilver(data.metals);
       const listChanges = [], opens = [];
-      reply = reply.replace(/^\s*(TODO_ADD|TODO_DONE|TODO_UNDONE|TODO_DELETE|NOTE_DELETE|NOTE|DEBT_ADD|DEBT_PAY|DEBT_BALANCE|DEBT_TERMS|DEBT_PLAN|DEBT_DELETE|DEBT_DUE|BILL_ADD|BILL_PAID|BILL_DELETE|BILL_EDIT|FBANK_CONTRIB|FBANK_REQUEST|FBANK_APPROVE|FBANK_DECLINE|FBANK_FUND|FBANK_PAY|FBANK_AFR|DATE_ADD|DATE_EDIT|DATE_DELETE|DATE_LEAD|SILVER_WINDOW|SILVER_PREMIUM|SILVER_GOAL|OPEN_URL|SITE_ADD|SITE_DELETE|WRITE_BOOK_ADD|WRITE_FOCUS_OFF|WRITE_FOCUS|WRITE_SUMMARY|WRITE_STATUS|WRITE_CHAPTER_ADD|WRITE_STYLE|WRITE_NOTE|WRITE_STAGE|WRITE_CHECK|WRITE_DETAILS|STUDY_PLAN|STUDY_THEME|STUDY_READ|STUDY_SCORE|BOOK_ADD|BOOK_START|BOOK_PROGRESS|BOOK_DONE|BOOK_SKIP|BOOK_REMOVE|BOOK_CHECK|BOOK_REVIEWED|PLAYBOOK|TIMER_START|TIMER_STOP|TIMER_ADD):\s*(.*)$/gim, (m, cmd, arg) => {
+      reply = reply.replace(/^\s*(TODO_ADD|TODO_DONE|TODO_UNDONE|TODO_DELETE|NOTE_DELETE|NOTE|DEBT_ADD|DEBT_PAY|DEBT_BALANCE|DEBT_TERMS|DEBT_PLAN|DEBT_DELETE|DEBT_DUE|BILL_ADD|BILL_PAID|BILL_DELETE|BILL_EDIT|FBANK_CONTRIB|FBANK_REQUEST|FBANK_APPROVE|FBANK_DECLINE|FBANK_FUND|FBANK_PAY|FBANK_AFR|DATE_ADD|DATE_EDIT|DATE_DELETE|DATE_LEAD|SILVER_WINDOW|SILVER_PREMIUM|SILVER_GOAL|OPEN_URL|SITE_ADD|SITE_DELETE|COACH_COMMIT|COACH_DONE|COACH_DROP|COACH_LOG|WRITE_BOOK_ADD|WRITE_FOCUS_OFF|WRITE_FOCUS|WRITE_SUMMARY|WRITE_STATUS|WRITE_CHAPTER_ADD|WRITE_STYLE|WRITE_NOTE|WRITE_STAGE|WRITE_CHECK|WRITE_DETAILS|STUDY_PLAN|STUDY_THEME|STUDY_READ|STUDY_SCORE|BOOK_ADD|BOOK_START|BOOK_PROGRESS|BOOK_DONE|BOOK_SKIP|BOOK_REMOVE|BOOK_CHECK|BOOK_REVIEWED|PLAYBOOK|TIMER_START|TIMER_STOP|TIMER_ADD):\s*(.*)$/gim, (m, cmd, arg) => {
         const C = cmd.toUpperCase();
         if (C.startsWith("TIMER_")) {
           let tm = null;
@@ -3509,7 +3626,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
           if (tm) listChanges.push(tm);
           return "";
         }
-        const msg = (C === "OPEN_URL" || C.startsWith("SITE_")) ? applySiteCommand(C, arg.trim(), opens) : C.startsWith("WRITE_") ? applyWriteCommand(C, arg.trim()) : C.startsWith("SILVER_") ? applySilverCommand(C, arg.trim()) : C.startsWith("DATE_") ? applyDateCommand(C, arg.trim()) : C.startsWith("FBANK_") ? applyFbankCommand(C, arg.trim()) : (C === "DEBT_DUE" || C.startsWith("BILL_")) ? applyBillCommand(C, arg.trim()) : C.startsWith("DEBT_") ? applyDebtCommand(C, arg.trim()) : C.startsWith("STUDY_") ? applyStudyCommand(C, arg.trim())
+        const msg = C.startsWith("COACH_") ? applyCoachCommand(C, arg.trim()) : (C === "OPEN_URL" || C.startsWith("SITE_")) ? applySiteCommand(C, arg.trim(), opens) : C.startsWith("WRITE_") ? applyWriteCommand(C, arg.trim()) : C.startsWith("SILVER_") ? applySilverCommand(C, arg.trim()) : C.startsWith("DATE_") ? applyDateCommand(C, arg.trim()) : C.startsWith("FBANK_") ? applyFbankCommand(C, arg.trim()) : (C === "DEBT_DUE" || C.startsWith("BILL_")) ? applyBillCommand(C, arg.trim()) : C.startsWith("DEBT_") ? applyDebtCommand(C, arg.trim()) : C.startsWith("STUDY_") ? applyStudyCommand(C, arg.trim())
           : (C.startsWith("BOOK_") || C === "PLAYBOOK") ? applyBookCommand(C, arg.trim()) : applyListCommand(C, arg.trim());
         if (msg) listChanges.push(msg);
         return "";
@@ -3520,7 +3637,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
       const meta = { checked: Array.isArray(data.checked) ? data.checked : [], sources: Array.isArray(data.sources) ? data.sources.slice(0, 6) : [] };
       if (opens.length) meta.links = opens.slice(0, 4);
       if (docSent && docCh) { meta.docCh = docCh; try { meta.sugIds = storeSuggestions(reply, docCh); } catch (e) {} }
-      state.history.push({ role: "user", content: text }, { role: "assistant", content: reply, meta });
+      state.history.push(opts.hidden ? { role: "user", content: text, hidden: true } : { role: "user", content: text }, { role: "assistant", content: reply, meta });
       if (state.history.length > 200) state.history = state.history.slice(-200);
       save();
       logEl.append(msgEl("assistant", reply, meta));
@@ -3997,7 +4114,7 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
     $("sSync").checked = !!s.syncOn;
     fillBackups();
     if (!s.syncOn) syncStatus("Off on this device."); $("sPalette").value = s.palette; $("sBible").value = s.bible; $("sEpisodes").value = s.episodes || "";
-    loadVoices(); try { renderSites(); } catch (e) {}
+    loadVoices(); try { renderSites(); renderCoach(); } catch (e) {}
     formSnap = readForm();
     if (!dlg.open) dlg.showModal();
   }
@@ -4138,6 +4255,9 @@ Your replies are spoken aloud. ${["Keep answers very short: one or two sentences
   applyPalette(state.settings.palette);
   if (state.settings.syncOn) setTimeout(() => syncNow(false), 1200);
   setTimeout(() => { try { dueAlertOnOpen(); } catch (e) {} try { dateAlertOnOpen(); } catch (e) {} }, 900);
+  setTimeout(() => { try { coachOffer(); } catch (e) {} }, 2500);
+  setInterval(() => { try { if (!document.hidden) coachOffer(); } catch (e) {} }, 5 * 60000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) setTimeout(() => { try { coachOffer(); } catch (e) {} }, 2500); });
   renderList();
   if (state.timer) { if (state.timer.end <= Date.now()) setTimeout(timerDone, 800); else { runTimer(); keepAwake(true); } }
   render();
